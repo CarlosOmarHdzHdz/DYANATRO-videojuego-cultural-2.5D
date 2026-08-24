@@ -1,0 +1,47 @@
+# Unity generated folders
+[Ll]ibrary/
+[Tt]emp/
+[Oo]bj/
+[Bb]uild/
+[Bb]uilds/
+[Ll]ogs/
+[Uu]ser[Ss]ettings/
+[Mm]emoryCaptures/
+
+# IDE and OS files
+.vs/
+.vscode/
+.idea/
+*.csproj
+*.sln
+*.slnx
+*.user
+*.pidb
+*.booproj
+*.svd
+*.tmp
+*.userprefs
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Unity crash/debug output
+sysinfo.txt
+*.stackdump
+
+# Academic/project writing documents excluded from this game repository
+*.doc
+*.docx
+*.pdf
+*.ppt
+*.pptx
+*.xls
+*.xlsx
+
+# Local backups not intended for import
+Respaldo/
+Respaldo_2D_Completo_NoImportar/
+Respaldo_PackageManager_NoImportar/
+output/
+tmp/
+Assets/_Recovery/

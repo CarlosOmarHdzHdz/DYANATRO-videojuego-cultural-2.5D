@@ -1,0 +1,25 @@
+﻿Xunjuu - version 2D completa
+
+Esta carpeta contiene una version 2D independiente dentro del mismo proyecto Unity.
+No borra ni reemplaza la escena 3D/2.5D existente.
+
+Como crear o actualizar la escena:
+1. Espera a que Unity compile.
+2. En el menu superior abre: Xunjuu > Crear escena 2D completa.
+3. Unity creara o reemplazara: Assets/2D_Completo/Scenes/Xunju_2D_Completo.unity
+4. Abre esa escena y presiona Play.
+
+Funciones incluidas:
+- Espada como item recogible.
+- Sin espada, Mateo golpea con la mano.
+- Con espada, el ataque hace mas daño y tiene mayor rango.
+- Palabras mazahuas coleccionables: jñatjo, jñaa, jñiñi, xiskuama, b'epji, skuama, ngunxorú y Xonijomu.
+- Mision con progreso y mensaje de mision cumplida.
+- Fondo procedural inspirado en San Felipe del Progreso: cerros, plaza, kiosco/parroquia y atardecer.
+- Mas vegetacion: arboles, pasto alto, arbustos, flores y arbolitos usando sprites del proyecto.
+- Musica mazahua_bosque_pino_bgm_v2.wav.
+
+Controles:
+- WASD o flechas: mover
+- Espacio o click izquierdo: atacar
+- Escape: pausar

@@ -1,0 +1,24 @@
+Xunjuú v0.1 - Créditos de imágenes de la ludoteca
+
+1. Quexquemetl mazahua.jpg
+   Autor: Amantlali
+   Fuente: https://commons.wikimedia.org/wiki/File:Quexquemetl_mazahua.jpg
+   Licencia: Creative Commons Attribution-ShareAlike 4.0 International
+   Archivo local: vestimenta_mazahua.jpg
+
+2. Danza de las pastoras.jpg
+   Autor: Fernando Oscar Martín
+   Lugar descrito: Ixtlahuaca, Estado de México, México
+   Fuente: https://commons.wikimedia.org/wiki/File:Danza_de_las_pastoras.jpg
+   Licencia: Creative Commons Attribution-ShareAlike 4.0 International
+   Archivo local: danza_pastoras.jpg
+
+3. Campos de cultivo de maíz.jpg
+   Autor: Tlaxcala de Xicohténcatl
+   Fuente: https://commons.wikimedia.org/wiki/File:Campos_de_cultivo_de_maíz.jpg
+   Licencia: Creative Commons Attribution-ShareAlike 2.0 Generic
+   Archivo local: milpa_mexico.jpg
+
+Las imágenes se muestran dentro de una demostración educativa. Cualquier
+adaptación o redistribución deberá conservar la atribución y cumplir las
+condiciones ShareAlike de sus licencias.

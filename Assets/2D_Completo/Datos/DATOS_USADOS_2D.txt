@@ -1,0 +1,14 @@
+﻿Datos copiados para la version 2D:
+
+Sprites:
+- Mateo: descanso, caminar, salto, golpe
+- Dyanatro: enemigo, enemigoatak, EnemyDead
+- Espada: ARMA DESCANSA, ataquesword
+- Mundo: clound, arbol lloron, tree, tree 1, hoja, arbusto, flor
+- UI: healt
+
+Audio:
+- mazahua_bosque_pino_bgm_v2.wav
+
+El builder primero busca estos datos dentro de Assets/2D_Completo/Datos.
+Si Unity todavia no los ha importado, usa los assets originales como respaldo.
