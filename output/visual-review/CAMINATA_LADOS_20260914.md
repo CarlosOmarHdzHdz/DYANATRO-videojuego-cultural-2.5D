@@ -20,6 +20,8 @@ Generación: herramienta integrada de imágenes (imagegen), segunda variante sel
 
 El 14/09/2026 a las 10:20:43 la comprobación específica terminó correctamente para las ocho direcciones: textura seleccionada, reflejo horizontal, cuatro fases y retorno al reposo. Las filas frontales siguen usando el atlas original; las cinco orientaciones de perfil/espalda usan la corrección. Se verificó escala constante por fila. Resultado en `walk-sides-runtime.txt`.
 
+Corrección posterior: el avance del ciclo ahora usa una cadencia temporal adaptada a la velocidad. Antes el cálculo por distancia podía saltarse las poses estrechas cuando un frame físico recorría demasiado; ahora siempre recorre las cuatro fases en orden.
+
 La prueba desplaza de forma controlada al protagonista real dentro de la escena, invoca su animador y comprueba el SpriteRenderer. No sustituye una evaluación subjetiva del dibujo ni prueba navegación física mediante teclado. Las capturas `walk-side-2-0.png` a `walk-side-6-1.png` muestran los sprites dentro de la escena; el encuadre de prueba se restaura al terminar.
 
 Dos ejecuciones completas previas pasaron (10:14:24 y 10:19:06). La última ejecución pasó la caminata, pero la comprobación general posterior falló en `Animal froze while wandering`; no se modificó la IA de animales como parte de esta entrega. El resultado general actual se conserva sin ocultar ese fallo en `runtime-after.txt`.

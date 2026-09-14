@@ -34,6 +34,7 @@ public sealed class XunjuuCompleteSpriteAnimator : MonoBehaviour
     private Material directionalMaterial;
     private Vector3 previousWorldPosition;
     private float travelled;
+    private float walkCycleClock;
     private int activeFrame;
     private bool activeAction;
     private Sprite[] balancedWalk;
@@ -308,10 +309,17 @@ public sealed class XunjuuCompleteSpriteAnimator : MonoBehaviour
         if(state==1)
         {
             travelled+=distance;
-            float stride=1.8f*Mathf.Max(.1f,Mathf.Abs(transform.lossyScale.x));
-            frame=Mathf.FloorToInt(travelled/stride*4)%4;
+            // Advance by time, not raw displacement: fast physics steps must not skip
+            // the passing poses (0 -> 1 -> 2 -> 3), which caused visible limp walking.
+            float cadence=Mathf.Lerp(7.2f,10.5f,Mathf.InverseLerp(.15f,4.5f,speed));
+            walkCycleClock+=Time.deltaTime*cadence;
+            frame=Mathf.FloorToInt(walkCycleClock)%4;
         }
-        else if(state==2) frame=velocity.y>0?1:3;
+        else if(state==2)
+        {
+            walkCycleClock=0;
+            frame=(velocity.y>0f)?1:3;
+        }
         else if(state==3) frame=actionClock<.1f?0:actionClock<.27f?1:0;
         // Keep the angle even for reactions, instead of switching back to the old profile.
         spriteRenderer.sharedMaterial=directionalMaterial;
