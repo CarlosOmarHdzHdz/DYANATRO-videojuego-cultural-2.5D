@@ -1,0 +1,29 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 5894f1302b3d3cd4c9e91856a9b41321, type: 3}
+  m_Name: EnvironmentCatalog
+  m_EditorClassIdentifier: Assembly-CSharp::XunjuuEnvironmentCatalog
+  trees:
+  - {fileID: 2430528489515517884, guid: a4551b73da1c2bb418c10b58dfceaba0, type: 3}
+  - {fileID: 7748591275394258963, guid: 3824001856d2d4b41aa2be1bc7abea72, type: 3}
+  - {fileID: 1367183407507920872, guid: 80727e592226ff54fae5130b7cb46abc, type: 3}
+  rocks:
+  - {fileID: 5562793396947785854, guid: 9d2935ae6fe1c844293c5af9596477d7, type: 3}
+  - {fileID: 5854787131033624929, guid: 888c6d3c4f4d52a43a1438e2992f0523, type: 3}
+  - {fileID: 7878003924259617727, guid: 2723a679ffc132d4a9351885f2b9389c, type: 3}
+  houses:
+  - {fileID: 703731599479867687, guid: 5d1b70504e092b54f87986c3f1368b74, type: 3}
+  - {fileID: 620136175383040969, guid: 7a638b4ba8166ae49bc6ca980f107712, type: 3}
+  flower: {fileID: 8758101143933448346, guid: 2832550dede5cb946a5b60be2e040755, type: 3}
+  corn: {fileID: 239433954070476593, guid: a44d9921ef094794ca07609e845051da, type: 3}
+  foliageMaterial: {fileID: 2100000, guid: bd0babc63afbaf149b130143d2ca67db, type: 2}
+  groundMaterial: {fileID: 2100000, guid: cf25ea166efc8e54eab327cc6f1ea3ab, type: 2}
