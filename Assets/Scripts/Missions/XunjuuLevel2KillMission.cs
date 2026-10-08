@@ -6,7 +6,7 @@ using UnityEngine.UI;
 
 // ============================================================================
 // Xunjuu v0.1 - Progresion secuencial del primer nivel
-// ACCION: activar 6 animales, despues 5 enemigos y finalmente al jefe Ocelotl.
+// ACCION: capturar 6 animales sin combate, despues vencer 5 enemigos y al jefe Ocelotl.
 // MODIFICACION: grupos, cantidades, puntos y eventos quedan editables en Inspector.
 // ============================================================================
 [DisallowMultipleComponent]
@@ -24,11 +24,10 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     [Header("Xunjuu v0.1 - Objetivos")]
     [SerializeField, Min(1)] private int animalsToDefeat = 6;
     [SerializeField, Min(1)] private int enemiesToDefeat = 5;
-    [SerializeField] private bool requireAnimalDefeats = true;
     [SerializeField] private bool autoCountAnimalsFromHierarchy = true;
     [SerializeField] private bool autoCountEnemiesFromHierarchy = false;
     [SerializeField] private string requiredEnemyTag = "Enemy";
-    [SerializeField] private string[] allowedAnimalNames = { "Pato", "Venado" };
+    [SerializeField] private string[] allowedAnimalNames = { "Fauna" };
     [SerializeField] private bool missionActive;
 
     [Header("Xunjuu v0.1 - Contenido editable en Hierarchy")]
@@ -93,7 +92,7 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     public int AnimalsToDefeat => animalsToDefeat;
     public int RemainingEnemies => Mathf.Max(0, enemiesToDefeat - defeatedEnemies);
     public int RemainingAnimals => Mathf.Max(0, animalsToDefeat - defeatedAnimals);
-    public bool RequireAnimalDefeats => requireAnimalDefeats;
+    public bool RequireAnimalDefeats => false;
     public bool MissionActive => phase == MissionPhase.Animals || phase == MissionPhase.Enemies;
     public bool ObjectivesCompleted => objectivesCompleted;
     public bool Completed => completed;
@@ -107,6 +106,7 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     private void Awake()
     {
         enemiesToDefeat = 5;
+        PrepareCaptureRoster();
         if (createMissionHud && missionText == null)
             BuildMissionHud();
 
@@ -137,9 +137,9 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     private void SubscribeToDefeatEvents()
     {
         XunjuuEnemyDefeatEvents.EnemyDefeated -= RegisterEnemyDefeat;
-        XunjuuAnimalDefeatEvents.AnimalDefeated -= RegisterAnimalDefeat;
+        XunjuuAnimalCaptureEvents.AnimalCaptured -= RegisterAnimalCapture;
         XunjuuEnemyDefeatEvents.EnemyDefeated += RegisterEnemyDefeat;
-        XunjuuAnimalDefeatEvents.AnimalDefeated += RegisterAnimalDefeat;
+        XunjuuAnimalCaptureEvents.AnimalCaptured += RegisterAnimalCapture;
         defeatEventsSubscribed = true;
     }
 
@@ -148,13 +148,13 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         if (!defeatEventsSubscribed)
             return;
         XunjuuEnemyDefeatEvents.EnemyDefeated -= RegisterEnemyDefeat;
-        XunjuuAnimalDefeatEvents.AnimalDefeated -= RegisterAnimalDefeat;
+        XunjuuAnimalCaptureEvents.AnimalCaptured -= RegisterAnimalCapture;
         defeatEventsSubscribed = false;
     }
 
     // ========================================================================
     // Xunjuu v0.1 - Mision 2
-    // ACCION: mostrar solo patos y venados al recibir el Macuahuitl.
+    // ACCION: mostrar fauna regional para capturarla y documentarla.
     // ========================================================================
     [ContextMenu("Xunjuu v0.1/Iniciar mision de animales")]
     public void StartMission()
@@ -177,16 +177,21 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         SetMissionHudActive(true);
         RefreshText();
         ShowPhaseBanner(
-            "MISION 2 - FAUNA\n"
-            + "Mazahua: Tizi, pjantr'eje: 6.\n"
-            + "Español: Patos, venados: 6.");
+            "MISION 2 - REGISTRO DE FAUNA\n"
+            + "Acércate sin atacar y pulsa C.\n"
+            + "Captura seis especies para la Ludoteca.");
         onMissionStarted?.Invoke();
     }
 
-    // ACCION: contar un animal una sola vez y abrir la mision de enemigos.
+    // Compatibilidad con escenas antiguas: derrotar animales ya no avanza la mision.
     public void RegisterAnimalDefeat(GameObject animal)
     {
-        if (phase != MissionPhase.Animals || !CanCount(animal) || !IsAllowedAnimal(animal.name))
+    }
+
+    // ACCION: contar una captura una sola vez y abrir la mision de enemigos.
+    public void RegisterAnimalCapture(GameObject animal, string faunaId)
+    {
+        if (phase != MissionPhase.Animals || !CanCount(animal))
             return;
         if (!BelongsToGroup(animal, animalGroupRoot) || !countedAnimals.Add(animal.GetInstanceID()))
             return;
@@ -199,12 +204,15 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
 
     // ========================================================================
     // Xunjuu v0.1 - Mision 3
-    // ACCION: retirar animales derrotados y mostrar la cuota de Dyanatr'o.
+    // ACCION: retirar la fauna registrada y mostrar la cuota de Dyanatr'o.
     // ========================================================================
     private void BeginEnemyMission()
     {
         if (phase != MissionPhase.Animals)
             return;
+
+        var reward=FindFirstObjectByType<XunjuuSecondaryMissionWeaponReward>(FindObjectsInactive.Include);
+        if(reward!=null)reward.CompleteMission();
 
         if (autoCountEnemiesFromHierarchy)
         {
@@ -232,7 +240,7 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         ShowPhaseBanner(
             "MISION 3 - LAS SOMBRAS\n"
             + "Dyanatr'o: " + enemiesToDefeat + "\n"
-            + "Español: Derrota a " + enemiesToDefeat + " enemigos.");
+            + "Fauna registrada: recibes el Macuahuitl.\nDerrota a " + enemiesToDefeat + " enemigos.");
         onAnimalMissionCompleted?.Invoke();
     }
 
@@ -440,7 +448,7 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     public Transform FindNearestActiveObjective(Vector3 origin)
     {
         if (phase == MissionPhase.Animals)
-            return FindNearestComponent<XunjuuAnimalHealth>(animalGroupRoot, origin);
+            return FindNearestComponent<XunjuuAnimalCapture>(animalGroupRoot, origin);
         if (phase == MissionPhase.Enemies)
             return FindNearestEnemy(origin);
         if (phase == MissionPhase.Boss && spawnedBoss != null)
@@ -451,7 +459,7 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     public string GetGuideLabel()
     {
         if (phase == MissionPhase.Animals)
-            return "Animal de mision";
+            return "Fauna por capturar";
         if (phase == MissionPhase.Enemies)
             return "Dyanatr'o";
         if (phase == MissionPhase.Boss)
@@ -570,6 +578,8 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     {
         HashSet<Transform> uniqueActors = new HashSet<Transform>();
         foreach (XunjuuAnimalHealth animal in groupRoot.GetComponentsInChildren<XunjuuAnimalHealth>(true))
+            if (animal != null) uniqueActors.Add(animal.transform);
+        foreach (XunjuuAnimalCapture animal in groupRoot.GetComponentsInChildren<XunjuuAnimalCapture>(true))
             if (animal != null) uniqueActors.Add(animal.transform);
         foreach (EnemyHealth enemy in groupRoot.GetComponentsInChildren<EnemyHealth>(true))
             if (enemy != null) uniqueActors.Add(enemy.transform);
@@ -726,8 +736,8 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         {
             case MissionPhase.Animals:
                 missionText.text =
-                    $"Mazahua: Tizi, pjantr'eje: {RemainingAnimals}.\n"
-                    + $"Español: Patos, venados: {RemainingAnimals}.";
+                    $"REGISTRO DE FAUNA: {RemainingAnimals} pendientes.\n"
+                    + "Acércate y pulsa C para capturar.";
                 break;
             case MissionPhase.Enemies:
                 missionText.text =
@@ -845,7 +855,6 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     {
         enemiesToDefeat = Mathf.Max(1, enemiesToDefeat);
         animalsToDefeat = Mathf.Max(1, animalsToDefeat);
-        requireAnimalDefeats = true;
         phaseBannerDuration = Mathf.Clamp(phaseBannerDuration, 3f, 8f);
         missionMaximumDistance = Mathf.Max(missionMinimumDistance, missionMaximumDistance);
         animalMinimumSpacing = Mathf.Max(missionMinimumSpacing, animalMinimumSpacing);
@@ -863,7 +872,29 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     {
         return animalGroupRoot == null
             ? 0
-            : animalGroupRoot.GetComponentsInChildren<XunjuuAnimalHealth>(true).Length;
+            : animalGroupRoot.GetComponentsInChildren<XunjuuAnimalCapture>(true).Length;
+    }
+
+    private void PrepareCaptureRoster()
+    {
+        if (animalGroupRoot == null)
+            return;
+
+        List<Transform> animals = new List<Transform>();
+        foreach (XunjuuAnimalHealth health in animalGroupRoot.GetComponentsInChildren<XunjuuAnimalHealth>(true))
+            if (health != null && !animals.Contains(health.transform)) animals.Add(health.transform);
+        foreach (Animal animal in animalGroupRoot.GetComponentsInChildren<Animal>(true))
+            if (animal != null && !animals.Contains(animal.transform)) animals.Add(animal.transform);
+        animals.Sort((first, second) => string.CompareOrdinal(first.name, second.name));
+
+        IReadOnlyList<XunjuuFaunaCatalog.Entry> catalog = XunjuuFaunaCatalog.Entries;
+        for (int index = 0; index < animals.Count; index++)
+        {
+            XunjuuFaunaCatalog.Entry entry = catalog[index % catalog.Count];
+            Transform actor = animals[index];
+            actor.name = "Fauna_Mision2_" + (index + 1).ToString("00") + "_" + entry.Id;
+            XunjuuFaunaCatalog.ApplyAppearance(actor.gameObject, entry);
+        }
     }
 
     private int CountEnemiesInHierarchy()

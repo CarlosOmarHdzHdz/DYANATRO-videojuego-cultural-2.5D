@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using UnityEditor;
 using UnityEditor.SceneManagement;
@@ -18,13 +18,13 @@ public static class Xunju2DSceneBuilder
         Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
         scene.name = "Xunju_2D_Completo";
 
-        Sprite playerSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/descanso.png", "Assets/Sprites/descanso.png");
-        Sprite enemySprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/enemigo.png", "Assets/Sprites/enemigo.png");
-        Sprite treeSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/arbol lloron .png", "Assets/2D_Completo/Datos/Sprites/tree.png", "Assets/Sprites/arbol lloron .png", "Assets/Sprites/tree.png");
+        Sprite playerSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/descanso.png", "Assets/Sprites/Player/Legacy/descanso.png");
+        Sprite enemySprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/enemigo.png", "Assets/Sprites/Enemies/enemigo.png");
+        Sprite treeSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/arbol lloron .png", "Assets/2D_Completo/Datos/Sprites/tree.png", "Assets/Sprites/Environment/arbol lloron .png", "Assets/Sprites/Environment/tree.png");
         Sprite bushSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/arbusto.png", "Assets/Sprites/TextureTerrain/arbusto.png");
         Sprite flowerSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/flor.png", "Assets/Sprites/TextureTerrain/flor.png");
-        Sprite cloudSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/clound.png", "Assets/Sprites/clound.png");
-        Sprite swordSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/ARMA DESCANSA.png", "Assets/Sprites/ARMA DESCANSA.png");
+        Sprite cloudSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/clound.png", "Assets/Sprites/Environment/clound.png");
+        Sprite swordSprite = LoadSprite("Assets/2D_Completo/Datos/Sprites/ARMA DESCANSA.png", "Assets/Sprites/Player/Legacy/ARMA DESCANSA.png");
         AudioClip music = LoadAudio("Assets/2D_Completo/Datos/Audio/mazahua_bosque_pino_bgm_v2.wav", "Assets/Audio/mazahua_bosque_pino_bgm_v2.wav");
         Sprite groundSprite = CreateGroundSprite();
         Sprite grassSprite = CreateTallGrassSprite();

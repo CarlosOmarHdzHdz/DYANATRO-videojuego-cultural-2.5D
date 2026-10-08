@@ -833,7 +833,6 @@ PlayerSettings:
   webEnableSubmoduleStrippingCompatibility: 0
   scriptingDefineSymbols:
     Android: ENABLE_UNITY_COLLECTIONS_CHECKS
-    Standalone: ENABLE_UNITY_COLLECTIONS_CHECKS
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend:

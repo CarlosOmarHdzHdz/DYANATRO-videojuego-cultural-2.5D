@@ -415518,7 +415518,7 @@ MonoBehaviour:
   additionalTreePrefabs: []
   cloudPrefab: {fileID: 3131915597178799642, guid: 57cb51f295293c9448971b188b5fcecb, type: 3}
   animalPrefabs: []
-  backgroundMusic: {fileID: 8300000, guid: 93b79f85d75645d5a6a08f6a9e268b11, type: 3}
+  backgroundMusic: {fileID: 8300000, guid: f46871a025504f319f7ef079bf8cbc09, type: 3}
   menuMusicVolume: 0.82
   gameplayMusicReduction: 0.55
   musicFadeDuration: 0.85
