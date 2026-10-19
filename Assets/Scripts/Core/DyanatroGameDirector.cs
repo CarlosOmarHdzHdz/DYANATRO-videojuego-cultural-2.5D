@@ -135,6 +135,8 @@ public class DyanatroGameDirector : MonoBehaviour
     private Button introSkipButton;
     private Button prologueSkipButton;
     private Image healthFill;
+    private float healthFillVelocity;
+    private bool healthFillInitialized;
     private RawImage introVideoImage;
     private GameObject introVideoTranslationOverlay;
     private Text introVideoSpanishText;
@@ -221,6 +223,7 @@ public class DyanatroGameDirector : MonoBehaviour
         {
             player = playerObject.GetComponent<PlayerController>();
             playerTransform = playerObject.transform;
+            XunjuuSettlementPlan.Initialize(playerTransform.position);
 
             // Hoja completa del protagonista: se activa al obtener el arma.
             if (playerObject.GetComponent<XunjuuCompleteSpriteAnimator>() == null)
@@ -234,6 +237,7 @@ public class DyanatroGameDirector : MonoBehaviour
         if (GetComponent<XunjuuEnvironment3D>() == null) gameObject.AddComponent<XunjuuEnvironment3D>();
         if (GetComponent<XunjuuSceneVisualPolicy>() == null) gameObject.AddComponent<XunjuuSceneVisualPolicy>();
         if (GetComponent<XunjuuFaunaCaptureSystem>() == null) gameObject.AddComponent<XunjuuFaunaCaptureSystem>();
+        if (GetComponent<XunjuuMedicinalPlantSystem>() == null) gameObject.AddComponent<XunjuuMedicinalPlantSystem>();
     }
     void Start()
     {
@@ -1079,7 +1083,8 @@ public class DyanatroGameDirector : MonoBehaviour
         if (runtimeMazahuaFlowerSprite != null)
             return runtimeMazahuaFlowerSprite;
 
-        runtimeMazahuaFlowerSprite = Resources.Load<Sprite>("Sprites/Collectibles/TsirajnaNeDyebe");
+        runtimeMazahuaFlowerSprite = XunjuuPresentationSprites.Load("Sprites/Collectibles/FlorMemoria_v2",1.3f,new Vector2(.5f,0));
+        if(runtimeMazahuaFlowerSprite==null)runtimeMazahuaFlowerSprite = Resources.Load<Sprite>("Sprites/Collectibles/TsirajnaNeDyebe");
         if (runtimeMazahuaFlowerSprite != null)
             return runtimeMazahuaFlowerSprite;
 
@@ -2310,7 +2315,18 @@ public class DyanatroGameDirector : MonoBehaviour
             return;
 
         float maxHealth = Mathf.Max(1, player.GetMaxHealth());
-        healthFill.fillAmount = Mathf.Clamp01(player.GetCurrentHealth() / maxHealth);
+        float target = Mathf.Clamp01(player.GetCurrentHealth() / maxHealth);
+        if (!healthFillInitialized)
+        {
+            healthFill.fillAmount = target;
+            healthFillInitialized = true;
+        }
+        else if (Time.deltaTime > 0f)
+        {
+            if ((target - healthFill.fillAmount) * healthFillVelocity < 0f) healthFillVelocity = 0f;
+            healthFill.fillAmount = Mathf.SmoothDamp(healthFill.fillAmount, target,
+                ref healthFillVelocity, 0.16f, Mathf.Infinity, Time.deltaTime);
+        }
     }
 
     void SpawnTallGrass()
@@ -2418,6 +2434,12 @@ public class DyanatroGameDirector : MonoBehaviour
 
     void SpawnCornMilpas(bool forceRegenerate)
     {
+        if (Application.isPlaying && !cornLayoutScheduled)
+        {
+            cornLayoutScheduled = true;
+            StartCoroutine(SpawnCornAfterVillage());
+            return;
+        }
         if (cornFieldCount <= 0 || cornRowsPerField <= 0 || cornStalksPerRow <= 0)
             return;
 
@@ -2426,19 +2448,24 @@ public class DyanatroGameDirector : MonoBehaviour
             return;
 
         GameObject existing = GameObject.Find("Milpas_Maiz_Dyanatro");
-        if (existing != null && existing.transform.childCount > 0 && !forceRegenerate)
+        if (existing != null && existing.transform.childCount > 0 && !forceRegenerate && !Application.isPlaying)
         {
             PrepareExistingCornFields(existing);
             return;
         }
         if (existing != null)
+        {
+            existing.SetActive(false);
             DestroySceneObject(existing);
+        }
 
         Terrain[] terrains = FindObjectsByType<Terrain>(FindObjectsSortMode.None);
         if (terrains.Length == 0)
             return;
         GameObject root = new GameObject("Milpas_Maiz_Dyanatro");
-        Vector3 center = playerTransform != null ? playerTransform.position : Vector3.zero;
+        if(Application.isPlaying)XunjuuSettlementPlan.Fields.Clear();
+        Vector3 center = Application.isPlaying ? XunjuuSettlementPlan.Origin : playerTransform != null ? playerTransform.position : Vector3.zero;
+        var fieldRandom=new System.Random(20261016);
         int fields = 0;
         int attempts = 0;
         List<Vector3> fieldCenters = new List<Vector3>();
@@ -2447,7 +2474,9 @@ public class DyanatroGameDirector : MonoBehaviour
         while (fields < cornFieldCount && attempts < cornFieldCount * 80)
         {
             attempts++;
-            Vector2 circle = Random.insideUnitCircle * cornFieldRadius;
+            float polar=(float)fieldRandom.NextDouble()*Mathf.PI*2f;
+            float radius=Mathf.Sqrt((float)fieldRandom.NextDouble())*Mathf.Max(cornFieldRadius,125f);
+            Vector2 circle = new Vector2(Mathf.Cos(polar),Mathf.Sin(polar))*radius;
             Vector3 basePosition = center + new Vector3(circle.x, 0f, circle.y);
 
             if (playerTransform != null && Vector3.Distance(basePosition, playerTransform.position) < treeMinDistanceFromPlayer * 2.2f)
@@ -2463,18 +2492,35 @@ public class DyanatroGameDirector : MonoBehaviour
             if (IsNearProtectedGameplayPoint(fieldCenter, protectedGameplayPoints, 9f))
                 continue;
 
+            // Reservar el rectángulo completo antes de crear surcos o plantas.
+            float rowSpacing = 1.4f, stalkSpacing = 1.35f;
+            float furrowLength = (cornStalksPerRow - 1) * stalkSpacing + 2.4f;
+            Bounds footprint = new Bounds(fieldCenter, new Vector3((cornRowsPerField - 1) * rowSpacing + 3f, 5f, furrowLength + 2f));
+            if (Application.isPlaying && !XunjuuSettlementPlan.CanPlaceField(footprint)) continue;
+            bool blocked = false;
+            for (float x = footprint.min.x; x <= footprint.max.x && !blocked; x += 2f)
+                for (float z = footprint.min.z; z <= footprint.max.z; z += 2f)
+                {
+                    Vector3 p = new Vector3(x, fieldCenter.y, z);
+                    if (!XunjuuSettlementPlan.TryGround(p, out float y) || Mathf.Abs(y - fieldCenter.y) > .85f) { blocked = true; break; }
+                }
+            if (blocked) continue;
+            foreach (Collider hit in Physics.OverlapBox(fieldCenter + Vector3.up * 2f, footprint.extents, Quaternion.identity, ~0, QueryTriggerInteraction.Ignore))
+                if (!(hit is TerrainCollider) && !XunjuuSceneVisualPolicy.IsSoftDecoration(hit.transform)) { blocked = true; break; }
+            if (blocked) continue;
+            if (Application.isPlaying)
+            {
+                XunjuuSettlementPlan.Fields.Add(footprint);
+                XunjuuSettlementPlan.ClearGroundDecoration(footprint);
+            }
+
             GameObject field = new GameObject($"Milpa_Maiz_{fields + 1:00}");
             field.transform.SetParent(root.transform, false);
             field.transform.position = fieldCenter;
             XunjuuCropField cropField = field.AddComponent<XunjuuCropField>();
             cropField.ConfigureExisting("Milpa de maíz " + (fields + 1), cornRowsPerField, cornStalksPerRow);
 
-            float angle = Random.Range(0f, Mathf.PI * 2f);
-            Vector3 rowAxis = new Vector3(Mathf.Cos(angle), 0f, Mathf.Sin(angle));
-            Vector3 lineAxis = new Vector3(-rowAxis.z, 0f, rowAxis.x);
-            float rowSpacing = Random.Range(1.15f, 1.45f);
-            float stalkSpacing = Random.Range(1.05f, 1.35f);
-            float furrowLength = (cornStalksPerRow - 1) * stalkSpacing + 2.4f;
+            Vector3 rowAxis = Vector3.right, lineAxis = Vector3.forward;
 
             for (int row = 0; row < cornRowsPerField; row++)
             {
@@ -2492,12 +2538,13 @@ public class DyanatroGameDirector : MonoBehaviour
                     GameObject corn = new GameObject($"Maiz_F{fields + 1:00}_R{row + 1:00}_P{stalk + 1:00}");
                     corn.transform.SetParent(field.transform, false);
                     corn.transform.position = GroundPoint(pos);
-                    float cornScale = Random.Range(0.34f, 0.52f);
-                    corn.transform.localScale = new Vector3(cornScale * Random.Range(0.92f, 1.08f), cornScale * Random.Range(0.95f, 1.12f), 1f);
+                    float height = Random.Range(1.7f, 2.15f);
+                    corn.transform.localScale = Vector3.one * (height / Mathf.Max(.01f, cornSprite.bounds.size.y));
+                    corn.AddComponent<CloudBillboard>().SetUpright();
 
                     SpriteRenderer renderer = corn.AddComponent<SpriteRenderer>();
                     renderer.sprite = cornSprite;
-                    renderer.color = Color.Lerp(new Color(0.94f, 1f, 0.62f, 1f), new Color(0.58f, 0.88f, 0.26f, 1f), Random.value * 0.45f);
+                    renderer.color = Color.white;
 
                     DyanatroSpriteDepthSorter sorter = corn.AddComponent<DyanatroSpriteDepthSorter>();
                     sorter.Configure(-7, 10f);
@@ -2514,6 +2561,19 @@ public class DyanatroGameDirector : MonoBehaviour
 
         if (fields < cornFieldCount)
             Debug.LogWarning($"Xunjuu v0.1: se generaron {fields}/{cornFieldCount} milpas sin traslapes.");
+    }
+
+    private bool cornLayoutScheduled;
+    private IEnumerator SpawnCornAfterVillage()
+    {
+        float timeout = Time.realtimeSinceStartup + 15f;
+        while (Time.realtimeSinceStartup < timeout)
+        {
+            var meadow = GetComponent<XunjuuMeadowDressing>();
+            if (meadow != null && meadow.VillageReady) break;
+            yield return null;
+        }
+        SpawnCornMilpas(true);
     }
 
     // ACCIÓN Xunjuú v0.1: completar componentes en milpas colocadas manualmente.

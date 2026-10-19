@@ -99,6 +99,35 @@ public sealed class XunjuuInventory : MonoBehaviour
         return true;
     }
 
+    // Valida la receta completa antes de tocar el morral; emite un único cambio.
+    public bool TryExchange(IReadOnlyDictionary<string, int> costs, string outputId, string outputName, Sprite outputIcon)
+    {
+        if (costs == null || costs.Count == 0 || string.IsNullOrWhiteSpace(outputId) || costs.ContainsKey(outputId)) return false;
+        int removedTypes = 0;
+        var normalized = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var cost in costs)
+        {
+            if (string.IsNullOrWhiteSpace(cost.Key) || cost.Value <= 0 || !normalized.Add(cost.Key)
+                || string.Equals(cost.Key, outputId, StringComparison.OrdinalIgnoreCase)) return false;
+            int available = GetAmount(cost.Key);
+            if (available < cost.Value) return false;
+            if (available == cost.Value) removedTypes++;
+        }
+        Slot output = items.Find(s => string.Equals(s.ItemId, outputId, StringComparison.OrdinalIgnoreCase));
+        if (items.Count - removedTypes + (output == null ? 1 : 0) > maxDifferentItems) return false;
+        foreach (var cost in costs)
+        {
+            Slot slot = items.Find(s => string.Equals(s.ItemId, cost.Key, StringComparison.OrdinalIgnoreCase));
+            slot.Add(-cost.Value);
+            if (slot.Amount == 0) items.Remove(slot);
+        }
+        if (output == null) items.Add(new Slot(outputId, outputName, 1, outputIcon));
+        else { output.Add(1); output.SetIcon(outputIcon); }
+        ClampSelection();
+        Changed?.Invoke();
+        return true;
+    }
+
     // Xunjuu v0.1 - ACCION: recorrer el inventario como una secuencia de eleccion.
     public void SelectNext()
     {

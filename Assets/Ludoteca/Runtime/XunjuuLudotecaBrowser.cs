@@ -14,7 +14,7 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 {
-    private enum Page { Home, Culture, Gallery, Fauna, Language, MiniGame, Survey }
+    private enum Page { Home, Culture, Gallery, Fauna, Language, MiniGame, Survey, Plants }
 
     // Tintes del prototipo entregado: manta, añil, grana, maíz y madera oscura.
     private static readonly Color ForestBackground = new Color(0.095f, 0.075f, 0.061f, 0.99f);
@@ -205,13 +205,14 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         TextBlock(nav.transform, "ARCHIVO CULTURAL INTERACTIVO", 14, new Vector2(0.5f, 0.855f), new Vector2(340f, 26f), TextAnchor.MiddleCenter, ParchmentShade);
         TextBlock(nav.transform, "EXPLORA  /  APRENDE  /  PRACTICA", 14, new Vector2(0.5f, 0.815f), new Vector2(340f, 26f), TextAnchor.MiddleCenter, Gold);
         NavButton(nav.transform, "Cultura", 0.76f, Page.Culture);
-        NavButton(nav.transform, "Galería", 0.65f, Page.Gallery);
-        NavButton(nav.transform, "Fauna", 0.54f, Page.Fauna);
-        NavButton(nav.transform, "Lengua mazahua", 0.43f, Page.Language);
-        NavButton(nav.transform, "Minijuegos", 0.32f, Page.MiniGame);
-        NavButton(nav.transform, "Evaluación", 0.21f, Page.Survey);
-        TextBlock(nav.transform, "06 SECCIONES  ·  03 ACTIVIDADES", 14, new Vector2(.5f,.12f), new Vector2(315f,27f), TextAnchor.MiddleCenter, ParchmentShade);
-        CreateCardIcon(nav.transform, ElementIcon(4), new Vector2(.5f,.073f), new Vector2(250f,43f));
+        NavButton(nav.transform, "Galería", 0.66f, Page.Gallery);
+        NavButton(nav.transform, "Fauna", 0.56f, Page.Fauna);
+        NavButton(nav.transform, "Herbolaria", 0.46f, Page.Plants);
+        NavButton(nav.transform, "Lengua mazahua", 0.36f, Page.Language);
+        NavButton(nav.transform, "Minijuegos", 0.26f, Page.MiniGame);
+        NavButton(nav.transform, "Evaluación", 0.16f, Page.Survey);
+        TextBlock(nav.transform, "07 SECCIONES  ·  03 ACTIVIDADES", 14, new Vector2(.5f,.085f), new Vector2(315f,27f), TextAnchor.MiddleCenter, ParchmentShade);
+        CreateCardIcon(nav.transform, ElementIcon(4), new Vector2(.5f,.04f), new Vector2(250f,30f));
         AddSidebarEmbroidery(nav.transform);
 
         GameObject content = Panel(window.transform, "Contenido", Parchment);
@@ -245,6 +246,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
             dancePhoto != null ? dancePhoto : flower,
             milpaPhoto != null ? milpaPhoto : cloud);
         faunaRoot = BuildFaunaCollection(content.transform);
+        plantsRoot = BuildPlantCollection(content.transform);
         miniGameRoot = BuildMiniGame(content.transform);
         surveyRoot = BuildSurvey(content.transform);
 
@@ -276,7 +278,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
     private void NavButton(Transform parent, string label, float y, Page page)
     {
-        Button button = Button(parent, label, new Vector2(0.5f, y), new Vector2(310f, 72f), () => ShowPage(page), new Color(.20f,.16f,.14f,1f));
+        Button button = Button(parent, label, new Vector2(0.5f, y), new Vector2(310f, 62f), () => ShowPage(page), new Color(.20f,.16f,.14f,1f));
         navigationImages[page] = button.GetComponent<Image>();
         TMP_Text title = button.GetComponentInChildren<TMP_Text>();
         title.rectTransform.anchorMin = new Vector2(.31f, 0f);
@@ -286,10 +288,11 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         title.fontSize = 20;
         navigationLabels[page] = title;
         int number=(int)page;
-        if(page==Page.MiniGame)number=5;
-        else if(page==Page.Survey)number=6;
+        if(page==Page.MiniGame)number=6;
+        else if(page==Page.Survey)number=7;
+        else if(page==Page.Plants)number=4;
         else if(page==Page.Fauna)number=3;
-        else if(page==Page.Language)number=4;
+        else if(page==Page.Language)number=5;
         else if(page==Page.Gallery)number=2;
         else if(page==Page.Culture)number=1;
         TMP_Text index=TextBlock(button.transform,number.ToString("00"),15,
@@ -334,7 +337,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
             float x=.10f+i*.10f;
             Color thread=i%3==0?TextileGrana:i%3==1?TextileBlue:Gold;
             CreateDiamond(parent,new Vector2(x,.965f),10f,thread,ParchmentShade);
-            CreateDiamond(parent,new Vector2(x,.155f),9f,thread,ParchmentShade);
+            CreateDiamond(parent,new Vector2(x,.113f),9f,thread,ParchmentShade);
         }
     }
 
@@ -495,8 +498,8 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         }
     }
 
-    private void OnEnable() { XunjuuFaunaCatalog.CollectionChanged+=OnFaunaUnlocked; }
-    private void OnDisable() { XunjuuFaunaCatalog.CollectionChanged-=OnFaunaUnlocked; }
+    private void OnEnable() { XunjuuFaunaCatalog.CollectionChanged+=OnFaunaUnlocked; XunjuuMedicinalPlantCatalog.CollectionChanged+=OnPlantUnlocked; }
+    private void OnDisable() { XunjuuFaunaCatalog.CollectionChanged-=OnFaunaUnlocked; XunjuuMedicinalPlantCatalog.CollectionChanged-=OnPlantUnlocked; }
     private void OnFaunaUnlocked()
     {
         if(!initialized)return;
@@ -549,6 +552,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         if (contentOrnaments != null) contentOrnaments.SetActive(true);
         CloseFaunaDetails();
         CloseReading();
+        ClosePlantDetails();
         if (remember && page != currentPage)
             history.Push(currentPage);
         currentPage = page;
@@ -562,6 +566,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         if (page == Page.Home || page == Page.Gallery)
             SetGalleryMode(page == Page.Gallery);
         faunaRoot.SetActive(page == Page.Fauna);
+        plantsRoot.SetActive(page == Page.Plants);
         miniGameRoot.SetActive(page == Page.MiniGame);
         surveyRoot.SetActive(page == Page.Survey);
 
@@ -584,6 +589,11 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
                 break;
             case Page.Language:
                 SetPage("Lengua mazahua", "lengua", "VOCABULARIO DEMOSTRATIVO\n\njñiñi - pueblo\nndechjö - maiz\nmúbú - corazon / vida\nnu t'eje - el bosque\nndajma - flor\nlala - pato\npjanteje - venado\n\nAntes de publicar se deberan validar escritura, variante regional, contexto y pronunciacion con una fuente especializada.");
+                break;
+            case Page.Plants:
+                SetPage("Herbolaria · " + XunjuuMedicinalPlantCatalog.RegisteredCount + "/" + XunjuuMedicinalPlantCatalog.Entries.Count, "herbolaria", string.Empty);
+                RefreshPlantCollection();
+                statusText.text = "G recolectar y registrar · Selecciona una planta descubierta para VER FICHA";
                 break;
             case Page.MiniGame:
                 SetPage("Minijuegos de la Cultura Mazahua", "minijuegos", string.Empty);
@@ -668,6 +678,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
             case Page.Culture: return TextileGrana;
             case Page.Gallery: return Gold;
             case Page.Fauna: return ForestGreenLight;
+            case Page.Plants: return ForestGreenLight;
             case Page.Language: return ForestGreen;
             case Page.MiniGame: return TextileBlue;
             case Page.Survey: return TextileGrana;
@@ -946,6 +957,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
     private Sprite NavigationIcon(Page page)
     {
+        if (page == Page.Plants) return XunjuuMedicinalPlantCatalog.GetSprite(XunjuuMedicinalPlantCatalog.Find("manzanilla"));
         if (atlasIcons.TryGetValue(page, out Sprite cached)) return cached;
         Texture2D atlas = Resources.Load<Texture2D>("Ludoteca/Icons/iconos_ludoteca_atlas");
         if (atlas != null)

@@ -13,6 +13,9 @@ public class BarraVidaFrames : MonoBehaviour
     [Header("Configuración")]
     public float vidaMaxima = 100f;
     private float vidaActual;
+    private float vidaMostrada;
+    private float velocidadVisual;
+    [SerializeField, Min(0.01f)] private float suavizado = 0.16f;
     public bool usarDisenoMazahua = true;
     private bool vidaInicializada;
     private XunjuuHealthBarVisual visual;
@@ -35,16 +38,43 @@ public class BarraVidaFrames : MonoBehaviour
     public void EstablecerVida(int nuevaVida)
     {
         vidaMaxima = Mathf.Max(1f, vidaMaxima);
-        vidaInicializada = true;
         vidaActual = Mathf.Clamp(nuevaVida, 0f, vidaMaxima);
+        if (!vidaInicializada)
+        {
+            vidaMostrada = vidaActual;
+            velocidadVisual = 0f;
+            vidaInicializada = true;
+        }
+        // Al cambiar de sentido, responder sin seguir bajando después de curar.
+        if ((vidaActual - vidaMostrada) * velocidadVisual < 0f) velocidadVisual = 0f;
         ActualizarFrame();
         ActualizarTexto();
     }
+
+    private void LateUpdate() => ActualizarTransicion(Time.deltaTime);
+
+    // Solo anima el HUD: no retrasa el daño, la curación ni la derrota reales.
+    public void ActualizarTransicion(float deltaTime)
+    {
+        if (!vidaInicializada || deltaTime <= 0f) return;
+        vidaMostrada = Mathf.SmoothDamp(vidaMostrada, vidaActual, ref velocidadVisual,
+            Mathf.Max(0.01f, suavizado), Mathf.Infinity, deltaTime);
+        vidaMostrada = Mathf.Clamp(vidaMostrada, 0f, vidaMaxima);
+        if (Mathf.Abs(vidaMostrada - vidaActual) < 0.005f)
+        {
+            vidaMostrada = vidaActual;
+            velocidadVisual = 0f;
+        }
+        ActualizarFrame();
+    }
+
+    public float GetVidaMostrada() => vidaMostrada;
 
     public void EstablecerMaxima(int maxima)
     {
         vidaMaxima = Mathf.Max(1, maxima);
         vidaActual = Mathf.Clamp(vidaActual, 0, vidaMaxima);
+        vidaMostrada = Mathf.Clamp(vidaMostrada, 0, vidaMaxima);
         if (vidaInicializada)
         {
             ActualizarFrame();
@@ -70,7 +100,7 @@ public class BarraVidaFrames : MonoBehaviour
             visual = XunjuuHealthBarVisual.Create(this);
         if (visual != null)
         {
-            visual.SetHealth(vidaActual / Mathf.Max(1f, vidaMaxima));
+            visual.SetHealth(vidaMostrada / Mathf.Max(1f, vidaMaxima));
             return;
         }
         if (framesVida == null || framesVida.Length == 0)
@@ -85,7 +115,7 @@ public class BarraVidaFrames : MonoBehaviour
             return;
         }
 
-        float porcentaje = vidaActual / Mathf.Max(1f, vidaMaxima);
+        float porcentaje = vidaMostrada / Mathf.Max(1f, vidaMaxima);
         int frameIndex = Mathf.FloorToInt(porcentaje * (framesVida.Length - 1));
         frameIndex = Mathf.Clamp(frameIndex, 0, framesVida.Length - 1);
 

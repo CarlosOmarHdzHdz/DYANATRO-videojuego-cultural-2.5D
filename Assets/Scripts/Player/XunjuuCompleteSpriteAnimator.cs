@@ -226,6 +226,16 @@ public sealed class XunjuuCompleteSpriteAnimator : MonoBehaviour
         var pixels=atlas.GetPixels32();balancedWalk=new Sprite[32];
         var collider=GetComponent<Collider>();
         float bottom=collider!=null?transform.InverseTransformPoint(new Vector3(transform.position.x,collider.bounds.min.y,transform.position.z)).y:-.5f;
+        float[] rowHeights=new float[8];
+        for(int row=0;row<8;row++)for(int frame=0;frame<4;frame++)
+        {
+            int x0=Mathf.RoundToInt(frame*atlas.width/4f),x1=Mathf.RoundToInt((frame+1)*atlas.width/4f);
+            int y0=atlas.height-Mathf.RoundToInt((row+1)*atlas.height/8f),y1=atlas.height-Mathf.RoundToInt(row*atlas.height/8f);
+            int low=y1,high=y0;
+            for(int y=y0;y<y1;y++)for(int x=x0;x<x1;x++)
+                if(!IsDirectionalBackground(pixels[y*atlas.width+x])){low=Mathf.Min(low,y);high=Mathf.Max(high,y);}
+            if(low<=high)rowHeights[row]=Mathf.Max(rowHeights[row],high-low+1);
+        }
         for(int row=0;row<8;row++)for(int frame=0;frame<4;frame++)
         {
             int x0=Mathf.RoundToInt(frame*atlas.width/4f),x1=Mathf.RoundToInt((frame+1)*atlas.width/4f);
@@ -239,7 +249,7 @@ public sealed class XunjuuCompleteSpriteAnimator : MonoBehaviour
             for(int y=minY+Mathf.RoundToInt((maxY-minY)*.78f);y<=maxY;y++)for(int x=minX;x<=maxX;x++)
                 if(!IsDirectionalBackground(pixels[y*atlas.width+x])){sum+=x;count++;}
             float center=count>0?sum/count:(minX+maxX)*.5f;
-            float ppu=(maxY-minY+1)/XunjuuWorldScale.PlayerLocalHeight;
+            float ppu=rowHeights[row]/XunjuuWorldScale.PlayerLocalHeight;
             Rect rect=new Rect(x0,y0,x1-x0,y1-y0);
             balancedWalk[row*4+frame]=Sprite.Create(atlas,rect,new Vector2((center-x0)/rect.width,(minY-y0-bottom*ppu)/rect.height),ppu,0,SpriteMeshType.FullRect);
             balancedWalk[row*4+frame].name="Mateo_Balanced_"+row+"_"+frame;
@@ -300,8 +310,8 @@ public sealed class XunjuuCompleteSpriteAnimator : MonoBehaviour
         Vector3 direction=playerController.GetMoveDirection();
         if(!attack && !dead && direction.sqrMagnitude>.01f && Camera.main!=null)
         {
-            Vector3 right=Camera.main.transform.right,forward=Camera.main.transform.forward;
-            right.y=0;forward.y=0;right.Normalize();forward.Normalize();
+            Quaternion yaw=Quaternion.Euler(0,Camera.main.transform.eulerAngles.y,0);
+            Vector3 right=yaw*Vector3.right,forward=yaw*Vector3.forward;
             FacingIndex=DirectionIndex(new Vector2(Vector3.Dot(direction,right),Vector3.Dot(direction,forward)));
         }
         int state=dead?4:attack?3:jump?2:Time.time-lastMotionTime<.09f?1:0;

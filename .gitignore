@@ -46,3 +46,7 @@ output/visual-review/*.txt
 /output/*.log
 /output/project-organization/**/source-before/
 /output/project-organization/**/hashes-before.tsv
+
+# Pruebas locales de herbolaria (proyecto aislado, capturas y registros).
+/output/herbalism-validation/
+/output/herbalism-*.log

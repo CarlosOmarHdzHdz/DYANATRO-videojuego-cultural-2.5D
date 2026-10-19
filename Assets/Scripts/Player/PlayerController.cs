@@ -179,6 +179,8 @@ public class PlayerController : MonoBehaviour
             gameObject.AddComponent<XunjuuInventory>();
         if (GetComponent<XunjuuInventoryUI>() == null)
             gameObject.AddComponent<XunjuuInventoryUI>();
+        if (GetComponent<XunjuuHerbalCrafting>() == null)
+            gameObject.AddComponent<XunjuuHerbalCrafting>();
     }
 
     void ConfigureFallbackAudio()
@@ -291,17 +293,7 @@ public class PlayerController : MonoBehaviour
 
         // Obtener dirección de la cámara
         Transform cameraTransform = Camera.main != null ? Camera.main.transform : transform;
-        Vector3 camForward = cameraTransform.forward;
-        Vector3 camRight = cameraTransform.right;
-
-        // Ignorar inclinación vertical (mantener en el plano horizontal)
-        camForward.y = 0;
-        camRight.y = 0;
-        camForward.Normalize();
-        camRight.Normalize();
-
-        // Calcular movimiento relativo a la cámara
-        moveInput = (camForward * verticalInput + camRight * horizontalInput).normalized;
+        moveInput = CameraRelativeMovement(horizontalInput, verticalInput, cameraTransform.eulerAngles.y);
 
         // Actualizar animator
         if (animator != null)
@@ -380,21 +372,15 @@ public class PlayerController : MonoBehaviour
 
         TryPlayFootsteps();
 
-        if (rotateToMovement && !isAttacking && !isJumping)
-            RotateTowardsMovement();
-
         // ============================================
         // BILLBOARD: El sprite siempre mira a la cámara
         // ============================================
         if (Camera.main != null)
         {
-            Vector3 directionToCamera = transform.position - Camera.main.transform.position;
-            directionToCamera.y = 0;
-            if (directionToCamera != Vector3.zero)
-            {
-                Quaternion targetRotation = Quaternion.LookRotation(directionToCamera);
-                transform.rotation = Quaternion.Euler(0, targetRotation.eulerAngles.y, 0);
-            }
+            // Plano paralelo a la cámara: no torcer el cuerpo según su posición
+            // en pantalla, ni girarlo primero hacia el movimiento y después deshacerlo.
+            Quaternion billboard = Quaternion.Euler(0, Camera.main.transform.eulerAngles.y, 0);
+            if(rb!=null)rb.MoveRotation(billboard);else transform.rotation=billboard;
         }
     }
 
@@ -408,6 +394,12 @@ public class PlayerController : MonoBehaviour
         rb.linearVelocity = movement;
         if (moveInput.magnitude > 0.1f)
             moveDirection = moveInput.normalized;
+    }
+
+    public static Vector3 CameraRelativeMovement(float horizontal, float vertical, float cameraYaw)
+    {
+        Quaternion yaw = Quaternion.Euler(0, cameraYaw, 0);
+        return Vector3.ClampMagnitude(yaw * new Vector3(horizontal, 0, vertical), 1f);
     }
 
     private static bool IsPointerOverInterface()
@@ -891,6 +883,14 @@ public class PlayerController : MonoBehaviour
     // ============================================
     // SISTEMA DE VIDA
     // ============================================
+
+    public int RestoreHealth(int amount)
+    {
+        if (isDead || currentHealth <= 0 || amount <= 0) return 0;
+        int before = GetCurrentHealth();
+        SetHealth(Mathf.Min(maxHealth, before + amount));
+        return Mathf.Max(0, GetCurrentHealth() - before);
+    }
 
     public void SetHealth(int newHealth)
     {

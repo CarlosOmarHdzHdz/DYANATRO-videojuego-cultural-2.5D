@@ -1,18 +1,18 @@
 using UnityEngine;
 using UnityEngine.UI;
 
-// Packs the irregular five-row source into sixteen aligned health states.
+// Conserva el bordado original; solo anima de forma continua el interior.
 public sealed class XunjuuHealthBarVisual
 {
     private const int Columns = 4;
     private const int Rows = 4;
-    // Source artwork is not evenly spaced: the old linear frame index showed
-    // almost empty at 50 HP. Match the authored fill states instead.
-    private static readonly float[] FillLevels={1f,.84f,.80f,.75f,.68f,.62f,.58f,.53f,.48f,.34f,.15f,.07f,.05f,.02f,0f,0f};
 
     private readonly Image image;
     private readonly Sprite[] frames;
     private readonly Texture2D packedTexture;
+    private Image continuousFill;
+    private Sprite backgroundSprite, fillSprite;
+    private Texture2D backgroundTexture, fillTexture;
 
     private XunjuuHealthBarVisual(Image image, Sprite[] frames, Texture2D texture)
     {
@@ -124,7 +124,68 @@ public sealed class XunjuuHealthBarVisual
             shadow.effectDistance = new Vector2(1f, -1f);
         }
 
-        return new XunjuuHealthBarVisual(image, frames, sheet);
+        var visual = new XunjuuHealthBarVisual(image, frames, sheet);
+        visual.BuildContinuousFill(cellWidth, cellHeight);
+        return visual;
+    }
+
+    private void BuildContinuousFill(int width, int height)
+    {
+        // El primer estado contiene el bordado lleno y el último el fondo vacío.
+        Color[] full = packedTexture.GetPixels((int)frames[0].rect.x, (int)frames[0].rect.y, width, height);
+        Color[] empty = packedTexture.GetPixels((int)frames[15].rect.x, (int)frames[15].rect.y, width, height);
+        Color[] background = (Color[])full.Clone();
+        float scale = width / 300f;
+        int left = Mathf.RoundToInt(14f * scale), top = Mathf.RoundToInt(88f * scale);
+        int right = Mathf.RoundToInt(279f * scale), bottom = Mathf.RoundToInt(130f * scale);
+        int fillWidth = right - left, fillHeight = bottom - top;
+        var foreground = new Color[fillWidth * fillHeight];
+        for (int y = top; y < bottom; y++)
+        {
+            for (int x = left; x < right; x++)
+            {
+                float artX = x / scale, artY = y / scale + 64f;
+                bool skull = artX >= 110f && artY < 167f && artX < 166f - (artY - 152f) * 1.5f;
+                bool medallion = Vector2.Distance(new Vector2(artX, artY), new Vector2(268f, 153f)) < 16f;
+                if (skull || medallion) continue;
+                int pixel = (height - 1 - y) * width + x;
+                background[pixel] = empty[pixel];
+                foreground[(fillHeight - 1 - (y - top)) * fillWidth + x - left] = full[pixel];
+            }
+        }
+        backgroundTexture = MakeTexture(width, height, background, "HealthBorderRuntime");
+        fillTexture = MakeTexture(fillWidth, fillHeight, foreground, "HealthFillRuntime");
+        backgroundSprite = MakeSprite(backgroundTexture, "MazahuaHealth_Continuous");
+        fillSprite = MakeSprite(fillTexture, "MazahuaHealth_Fill");
+        image.sprite = backgroundSprite;
+
+        var fillObject = new GameObject("RellenoContinuo", typeof(RectTransform), typeof(CanvasRenderer), typeof(Image));
+        fillObject.transform.SetParent(image.transform, false);
+        continuousFill = fillObject.GetComponent<Image>();
+        continuousFill.sprite = fillSprite;
+        continuousFill.color = Color.white;
+        continuousFill.type = Image.Type.Filled;
+        continuousFill.fillMethod = Image.FillMethod.Horizontal;
+        continuousFill.fillOrigin = (int)Image.OriginHorizontal.Left;
+        continuousFill.raycastTarget = false;
+        Place(continuousFill.rectTransform, new Vector2(left, -top), new Vector2(fillWidth, fillHeight));
+    }
+
+    private static Texture2D MakeTexture(int width, int height, Color[] pixels, string name)
+    {
+        var texture = new Texture2D(width, height, TextureFormat.RGBA32, false)
+        { name = name, filterMode = FilterMode.Point, wrapMode = TextureWrapMode.Clamp, hideFlags = HideFlags.DontSave };
+        texture.SetPixels(pixels);
+        texture.Apply();
+        return texture;
+    }
+
+    private static Sprite MakeSprite(Texture2D texture, string name)
+    {
+        var sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(.5f, .5f), 100f, 0, SpriteMeshType.FullRect);
+        sprite.name = name;
+        sprite.hideFlags = HideFlags.DontSave;
+        return sprite;
     }
 
     private static void Place(RectTransform rect, Vector2 position, Vector2 size)
@@ -147,16 +208,16 @@ public sealed class XunjuuHealthBarVisual
 
     public void SetHealth(float normalized)
     {
-        if (frames == null || frames.Length == 0 || image == null)
-            return;
-
-        int index=0;float best=float.PositiveInfinity;
-        for(int i=0;i<FillLevels.Length;i++){float difference=Mathf.Abs(Mathf.Clamp01(normalized)-FillLevels[i]);if(difference<best){best=difference;index=i;}}
-        image.sprite = frames[Mathf.Clamp(index, 0, frames.Length - 1)];
+        if (continuousFill != null) continuousFill.fillAmount = Mathf.Clamp01(normalized);
     }
 
     public void Dispose()
     {
+        if (continuousFill != null) Release(continuousFill.gameObject);
+        Release(backgroundSprite);
+        Release(fillSprite);
+        Release(backgroundTexture);
+        Release(fillTexture);
         if (frames == null)
             return;
 
@@ -174,5 +235,11 @@ public sealed class XunjuuHealthBarVisual
             if (Application.isPlaying) Object.Destroy(packedTexture);
             else Object.DestroyImmediate(packedTexture);
         }
+    }
+
+    private static void Release(Object value)
+    {
+        if (value == null) return;
+        if (Application.isPlaying) Object.Destroy(value); else Object.DestroyImmediate(value);
     }
 }

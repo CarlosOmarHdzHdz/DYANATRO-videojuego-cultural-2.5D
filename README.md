@@ -91,3 +91,21 @@ La reorganización conserva la lógica y los identificadores; los registros en
 - [Diseño de historia](Docs/Design/DISENO_SOLO_HISTORIA_DYANATRO.md)
 - [Configuración y mejoras](Docs/Development/CONFIGURACION_MEJORAS.md)
 - [Estructura y mantenimiento](Docs/Development/ESTRUCTURA.md)
+- [Herbolaria, recolección y recuperación de salud](Docs/Design/HERBOLARIA_Y_RECUPERACION.md)
+
+## Plantas medicinales
+
+Seis plantas (manzanilla, hierbabuena, árnica mexicana, sábila, romero y toronjil
+morado) se recolectan con **G** y desbloquean fichas en **Ludoteca > Herbolaria**.
+La ludoteca solo muestra **VER FICHA**, información cultural y referencias, sin
+recetas. Las plantas aparecen en un único huerto fijo, no por todo el mapa.
+En el morral (**I**), el panel **Preparación de hierbas** permite elaborar una
+**Infusión de hierbas** con 2 manzanillas y 1 hierbabuena. **H** la utiliza
+para recuperar hasta 40 puntos de vida en 5 segundos de juego. La receta es
+ficticia; no es una recomendación médica. No consume objetos con salud completa
+ni permite acumular recuperaciones o revivir al personaje.
+
+La revisión también incorpora transiciones suaves de la barra de vida, caminos
+de acceso a las viviendas, milpas que respetan las reservas de espacio y nuevos
+sprites para la infusión y las flores recolectables. Consulta la
+[revisión de aldea y herbolaria](Docs/Design/REVISION_ALDEA_HERBOLARIA_20261016.md).

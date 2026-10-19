@@ -8,9 +8,9 @@ public sealed class XunjuuInventoryUI : MonoBehaviour
 {
     [SerializeField] private KeyCode toggleKey = KeyCode.I;
     [SerializeField] private bool startVisible;
-    private static readonly Color Wood = new Color(.30f,.15f,.12f,1);
-    private static readonly Color Rim = new Color(.66f,.39f,.23f,1);
-    private static readonly Color Inset = new Color(.40f,.20f,.22f,1);
+    private static readonly Color Wood = new Color(.10f,.16f,.14f,1);
+    private static readonly Color Rim = new Color(.49f,.42f,.29f,1);
+    private static readonly Color Inset = new Color(.20f,.26f,.23f,1);
     private static readonly Color Cream = new Color(1f,.91f,.72f,1);
     private static readonly Color Gold = new Color(.96f,.69f,.27f,1);
     private XunjuuInventory inventory;
@@ -21,6 +21,10 @@ public sealed class XunjuuInventoryUI : MonoBehaviour
     private Text selectedItemText, capacityText;
     private Image selectedIcon;
     private ScrollRect scroll;
+    private XunjuuHerbalCrafting herbalCrafting;
+    private Text recipeStock, recipeMessage;
+    private Text chamomileStock, mintStock;
+    private Button craftButton, useRemedyButton;
     private const int Columns = 8;
     public bool IsVisible => panel != null && panel.activeInHierarchy
         && (gameDirector == null || gameDirector.IsGameplayHudVisible);
@@ -29,6 +33,8 @@ public sealed class XunjuuInventoryUI : MonoBehaviour
     {
         gameDirector = FindFirstObjectByType<DyanatroGameDirector>();
         inventory = GetComponent<XunjuuInventory>() ?? gameObject.AddComponent<XunjuuInventory>();
+        herbalCrafting = GetComponent<XunjuuHerbalCrafting>();
+        if (herbalCrafting == null) herbalCrafting = gameObject.AddComponent<XunjuuHerbalCrafting>();
         EnsureEventSystem();
         BuildInterface();
         inventory.Changed += Refresh;
@@ -40,6 +46,7 @@ public sealed class XunjuuInventoryUI : MonoBehaviour
         if (gameDirector != null && !gameDirector.IsGameplayHudVisible) return;
         if (Input.GetKeyDown(toggleKey)) Toggle();
         if (!IsVisible) return;
+        RefreshRecipe();
         if (Input.GetKeyDown(KeyCode.RightArrow)) inventory.SelectNext();
         if (Input.GetKeyDown(KeyCode.LeftArrow)) inventory.SelectPrevious();
         if (Input.GetKeyDown(KeyCode.DownArrow) && inventory.Items.Count > 0)
@@ -65,9 +72,9 @@ public sealed class XunjuuInventoryUI : MonoBehaviour
         Place(open.GetComponent<RectTransform>(),new Vector2(1,0),new Vector2(1,0),new Vector2(-28,28));
         panel=ImageObject("Panel_Inventario",root.transform,Wood).gameObject;
         RectTransform rect=panel.GetComponent<RectTransform>();
-        rect.sizeDelta=new Vector2(864,642);Place(rect,new Vector2(.5f,.5f),new Vector2(.5f,.5f),Vector2.zero);
+        rect.sizeDelta=new Vector2(864,642);Place(rect,new Vector2(.5f,.5f),new Vector2(.5f,.5f),new Vector2(-174,0));
         Border(panel.transform,new Vector2(864,642));
-        Label(panel.transform,"MORRAL DE MATEO",28,TextAnchor.MiddleLeft,new Vector2(580,46),new Vector2(-102,263));
+        Label(panel.transform,"MORRAL DE DYANATR’O",25,TextAnchor.MiddleLeft,new Vector2(580,46),new Vector2(-102,263));
         capacityText=Label(panel.transform,"",16,TextAnchor.MiddleLeft,new Vector2(620,24),new Vector2(-82,226));
         Button close=MakeButton(panel.transform,"Cerrar","X",new Vector2(44,42),()=>SetVisible(false));
         close.GetComponent<RectTransform>().anchoredPosition=new Vector2(384,265);
@@ -94,9 +101,59 @@ public sealed class XunjuuInventoryUI : MonoBehaviour
         detail.rectTransform.sizeDelta=new Vector2(808,66);detail.rectTransform.anchoredPosition=new Vector2(0,-235);
         selectedIcon=ImageObject("Icono_Seleccion",detail.transform,Color.white);
         selectedIcon.rectTransform.sizeDelta=new Vector2(46,46);selectedIcon.rectTransform.anchoredPosition=new Vector2(-368,0);selectedIcon.preserveAspect=true;
-        selectedItemText=Label(detail.transform,"",20,TextAnchor.MiddleLeft,new Vector2(660,52),new Vector2(15,0));
+        selectedItemText=Label(detail.transform,"",20,TextAnchor.MiddleLeft,new Vector2(470,52),new Vector2(-80,0));
+        useRemedyButton=MakeButton(detail.transform,"Usar_Preparado","USAR [H]",new Vector2(150,46),UseRemedy);
+        useRemedyButton.GetComponent<RectTransform>().anchoredPosition=new Vector2(315,0);
         Label(panel.transform,"I  abrir / cerrar    |    Flechas o clic para elegir",16,TextAnchor.MiddleCenter,new Vector2(790,26),new Vector2(0,-290));
+        BuildHerbalWorkshop();
     }
+    private void BuildHerbalWorkshop()
+    {
+        Color ink=new Color(.17f,.24f,.19f),paper=new Color(.94f,.91f,.83f);
+        var workshop=ImageObject("Preparacion_Herbal",panel.transform,paper);
+        workshop.rectTransform.sizeDelta=new Vector2(330,642);workshop.rectTransform.anchoredPosition=new Vector2(614,0);
+        Border(workshop.transform,new Vector2(330,642));
+        var header=ImageObject("Cabecera_Herbolaria",workshop.transform,Wood);
+        header.rectTransform.sizeDelta=new Vector2(316,112);header.rectTransform.anchoredPosition=new Vector2(0,259);
+        Label(workshop.transform,"PREPARACIÓN\nDE HIERBAS",21,TextAnchor.MiddleCenter,new Vector2(300,58),new Vector2(0,271));
+        Label(workshop.transform,"RECOLECTA · COMBINA · RECUPERA",12,TextAnchor.MiddleCenter,new Vector2(304,25),new Vector2(0,225));
+        var icon=ImageObject("Preparado",workshop.transform,Color.white);icon.sprite=XunjuuMedicinalPlantCatalog.RemedySprite;
+        icon.preserveAspect=true;icon.rectTransform.sizeDelta=new Vector2(112,112);icon.rectTransform.anchoredPosition=new Vector2(0,142);
+        Label(workshop.transform,"Infusión de hierbas",22,TextAnchor.MiddleCenter,new Vector2(298,36),new Vector2(0,66)).color=ink;
+        string[] herbs={"manzanilla","hierbabuena"};string[] names={"Manzanilla","Hierbabuena"};
+        for(int i=0;i<2;i++)
+        {
+            float y=10-i*54;
+            var row=ImageObject("Ingrediente_"+herbs[i],workshop.transform,new Color(.87f,.87f,.77f));
+            row.rectTransform.sizeDelta=new Vector2(292,46);row.rectTransform.anchoredPosition=new Vector2(0,y);
+            var herbIcon=ImageObject("Planta",row.transform,Color.white);
+            herbIcon.sprite=XunjuuMedicinalPlantCatalog.GetSprite(XunjuuMedicinalPlantCatalog.Find(herbs[i]));herbIcon.preserveAspect=true;
+            herbIcon.rectTransform.sizeDelta=new Vector2(38,38);herbIcon.rectTransform.anchoredPosition=new Vector2(-120,0);
+            Label(row.transform,names[i],18,TextAnchor.MiddleLeft,new Vector2(160,35),new Vector2(-13,0)).color=ink;
+            Text stock=Label(row.transform,"",18,TextAnchor.MiddleRight,new Vector2(58,35),new Vector2(107,0));stock.color=ink;
+            if(i==0)chamomileStock=stock;else mintStock=stock;
+        }
+        recipeStock=Label(workshop.transform,"",15,TextAnchor.MiddleCenter,new Vector2(280,28),new Vector2(0,-93));recipeStock.color=ink;
+        Label(workshop.transform,"Hasta +40 de salud en 5 s\nRecuperación progresiva",17,TextAnchor.MiddleCenter,new Vector2(292,51),new Vector2(0,-138)).color=ink;
+        craftButton=MakeButton(workshop.transform,"Fabricar_Preparado","PREPARAR INFUSIÓN",new Vector2(292,46),CraftRemedy);
+        craftButton.GetComponent<RectTransform>().anchoredPosition=new Vector2(0,-194);
+        recipeMessage=Label(workshop.transform,"",14,TextAnchor.UpperLeft,new Vector2(286,48),new Vector2(0,-248));recipeMessage.color=ink;
+        Label(workshop.transform,"Receta ficticia del juego.\nNo es una recomendación médica.",12,TextAnchor.MiddleCenter,new Vector2(296,36),new Vector2(0,-294)).color=ink;
+    }
+    private void RefreshRecipe()
+    {
+        if(recipeStock==null || herbalCrafting==null)return;
+        chamomileStock.text=inventory.GetAmount("manzanilla")+" / 2";
+        mintStock.text=inventory.GetAmount("hierbabuena")+" / 1";
+        recipeStock.text="INFUSIONES DISPONIBLES: "+inventory.GetAmount(XunjuuHerbalCrafting.RemedyId);
+        recipeMessage.text=herbalCrafting.LastMessage;
+        craftButton.interactable=herbalCrafting.CanCraft;
+        var player=GetComponent<PlayerController>();
+        useRemedyButton.interactable=player!=null && inventory.SelectedItem!=null && inventory.SelectedItem.ItemId==XunjuuHerbalCrafting.RemedyId
+            && !herbalCrafting.IsRecovering && player.GetCurrentHealth()>0 && player.GetCurrentHealth()<player.GetMaxHealth();
+    }
+    private void CraftRemedy(){herbalCrafting.TryCraft();RefreshRecipe();}
+    private void UseRemedy(){herbalCrafting.TryUseRemedy();RefreshRecipe();}
     private void Refresh()
     {
         if(itemContainer==null||inventory==null)return;
@@ -108,6 +165,7 @@ public sealed class XunjuuInventoryUI : MonoBehaviour
         capacityText.text=inventory.Items.Count+" / "+inventory.Capacity+" tipos de objetos  ·  Recursos y recuerdos del camino";
         selectedItemText.text=selected!=null?selected.DisplayName+"   ×"+selected.Amount:"Tu morral está vacío. Recoge recursos para llenarlo.";
         selectedIcon.sprite=selected!=null?selected.Icon:null;selectedIcon.enabled=selected!=null&&selected.Icon!=null;
+        RefreshRecipe();
         Canvas.ForceUpdateCanvases();
         if(inventory.SelectedIndex>=0 && itemContainer.rect.height>scroll.viewport.rect.height)
         {

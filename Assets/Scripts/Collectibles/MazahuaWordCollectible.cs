@@ -48,6 +48,22 @@ public class MazahuaWordCollectible : MonoBehaviour
 
     void Start()
     {
+        Sprite improved=XunjuuPresentationSprites.Load("Sprites/Collectibles/FlorMemoria_v2",1.3f,new Vector2(.5f,0));
+        if(improved!=null)
+        {
+            foreach(var renderer in GetComponentsInChildren<SpriteRenderer>(true))
+            {
+                if(renderer.name.StartsWith("Aura_")){renderer.gameObject.SetActive(false);continue;}
+                renderer.sprite=improved;renderer.color=Color.white;
+                renderer.transform.localScale=Vector3.one;
+                var billboard=renderer.GetComponent<CloudBillboard>();
+                if(billboard==null)billboard=renderer.gameObject.AddComponent<CloudBillboard>();
+                billboard.SetUpright();
+            }
+        }
+        if(XunjuuSettlementPlan.TryGround(transform.position,out float ground))
+            transform.position=new Vector3(transform.position.x,ground+.09f,transform.position.z);
+        bobHeight=.055f;bobSpeed=1.7f;
         startPosition = transform.position;
         Collider collider = GetComponent<Collider>();
         if (collider == null)
@@ -73,7 +89,7 @@ public class MazahuaWordCollectible : MonoBehaviour
             return;
 
         transform.position = startPosition + Vector3.up * (Mathf.Sin(Time.time * bobSpeed) * bobHeight);
-        transform.Rotate(Vector3.up, 35f * Time.deltaTime, Space.World);
+        // La flor conserva su orientación: no gira de canto mientras se recoge.
     }
 
     void OnTriggerEnter(Collider other)

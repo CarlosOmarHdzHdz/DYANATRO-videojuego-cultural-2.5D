@@ -20,6 +20,7 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
     private Vector3 origin;
     public int PatchCount=>chunks.Count;
     public IReadOnlyList<Bounds> Buildings=>buildings;
+    public bool VillageReady { get; private set; }
     public float VegetatedSpan=>(Radius*2+1)*Cell;
 
     private IEnumerator Start()
@@ -27,6 +28,7 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
         var actor=FindFirstObjectByType<PlayerController>();
         if(actor==null) yield break;
         player=actor.transform;origin=player.position;terrains=Terrain.activeTerrains;
+        XunjuuSettlementPlan.Initialize(origin);
         BuildFloraSprites();
         flower=Resources.Load<Sprite>("Sprites/TextureTerrain/flor");
         if(flower==null)
@@ -40,6 +42,8 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
         Camera camera=Camera.main;
         if(camera!=null){camera.clearFlags=CameraClearFlags.Skybox;camera.farClipPlane=Mathf.Max(camera.farClipPlane,1600f);}
         BuildVillage();
+        BuildMainPath();
+        VillageReady = true;
         BuildMountainBackdrop();
         BuildDistantGroves();
         foreach(var label in FindObjectsByType<XunjuuWorldLabel>(FindObjectsSortMode.None))
@@ -55,7 +59,7 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
                     if(chunks.ContainsKey(key))
                     {
                         if(ring>4||detailedChunks.Contains(key))continue;
-                        Destroy(chunks[key].GetComponent<MeshFilter>().sharedMesh);Destroy(chunks[key]);chunks.Remove(key);
+                        ReleasePatch(chunks[key]);chunks.Remove(key);
                     }
                     BuildPatch(key);
                     yield return null;
@@ -65,9 +69,7 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
                 if(Mathf.Max(Mathf.Abs(entry.Key.x-center.x),Mathf.Abs(entry.Key.y-center.y))>Radius+1)expired.Add(entry.Key);
             foreach(var key in expired)
             {
-                var filter=chunks[key].GetComponent<MeshFilter>();
-                if(filter!=null)Destroy(filter.sharedMesh);
-                Destroy(chunks[key]);chunks.Remove(key);detailedChunks.Remove(key);
+                ReleasePatch(chunks[key]);chunks.Remove(key);detailedChunks.Remove(key);
             }
             yield return new WaitForSeconds(.5f);
         }
@@ -123,7 +125,12 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
     }
     private void BuildVillage()
     {
-        Vector3[] sites={new Vector3(-17,0,16),new Vector3(23,0,36),new Vector3(-43,0,47),new Vector3(40,0,65),new Vector3(-26,0,82),new Vector3(32,0,-34),new Vector3(-48,0,-26),new Vector3(63,0,17),new Vector3(-69,0,15),new Vector3(60,0,-58),new Vector3(-68,0,68),new Vector3(11,0,-76)};
+        Bounds garden=XunjuuSettlementPlan.HerbGarden;
+        Vector3 gardenGate=garden.center+Vector3.right*(garden.extents.x+1f);
+        var gardenAccess=new XunjuuSettlementPlan.Access{door=gardenGate,junction=XunjuuSettlementPlan.MainPathAt(gardenGate.z),width=1.05f};
+        XunjuuSettlementPlan.Accesses.Add(gardenAccess);
+        BuildAccessPath(transform,gardenAccess,100);
+        Vector3[] sites={new Vector3(-21,0,19),new Vector3(30,0,42),new Vector3(-45,0,62),new Vector3(55,0,94),new Vector3(-28,0,120),new Vector3(34,0,-41),new Vector3(-64,0,-37),new Vector3(86,0,14),new Vector3(-92,0,26),new Vector3(72,0,-85),new Vector3(-84,0,102),new Vector3(21,0,-117)};
         string[] models={"Casa_Adobe_Detallada","Casa_Corredor_Detallada","Casa_Adobe_Detallada","Casa_Cal_Corredor","Casa_Granero","Casa_Chimenea","Casa_Cal_Corredor","Casa_Chimenea","Casa_Corredor_Detallada","Casa_Granero","Casa_Adobe_Detallada","Casa_Cal_Corredor"};
         for(int i=0;i<sites.Length;i++)
         {
@@ -140,8 +147,12 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
                 if(OnPath(candidate)||InBuilding(candidate))continue;
                 Vector3 localSite=candidate-origin;
                 if(Mathf.Abs(localSite.x-Mathf.Sin(localSite.z*.018f)*10)<Mathf.Max(size.x,size.z)*.5f+3.5f)continue;
-                Vector3 facing=origin-candidate;facing.y=0;
+                Vector3 facing=XunjuuSettlementPlan.MainPathAt(candidate.z)-candidate;facing.y=0;
                 Quaternion buildingRotation=Quaternion.LookRotation(-facing.normalized,Vector3.up);
+                Bounds reserved = new Bounds(candidate + buildingRotation * (modelBounds.center * houseScale), Vector3.zero);
+                foreach (var corner in new[]{new Vector3(-1,-1,-1),new Vector3(-1,-1,1),new Vector3(-1,1,-1),new Vector3(-1,1,1),new Vector3(1,-1,-1),new Vector3(1,-1,1),new Vector3(1,1,-1),new Vector3(1,1,1)})
+                    reserved.Encapsulate(candidate + buildingRotation * ((modelBounds.center + Vector3.Scale(modelBounds.extents,corner)) * houseScale));
+                if (!XunjuuSettlementPlan.CanPlaceField(reserved)) continue;
                 bool uneven=false;
                 foreach(var corner in new[]{new Vector3(-size.x*.5f,0,-size.z*.5f),new Vector3(size.x*.5f,0,size.z*.5f),new Vector3(-size.x*.5f,0,size.z*.5f),new Vector3(size.x*.5f,0,-size.z*.5f)})
                     if(!Ground(candidate+buildingRotation*corner,out float height)||Mathf.Abs(height-y)>.8f){uneven=true;break;}
@@ -150,7 +161,19 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
                 // Reserve the full scaled roof/porch footprint, not the old
                 // small wall box, before placing a larger building.
                 foreach(Collider hit in Physics.OverlapBox(candidate+buildingRotation*(modelBounds.center*houseScale),modelBounds.extents*houseScale+new Vector3(.8f,.1f,.8f),buildingRotation,~0,QueryTriggerInteraction.Collide))
-                    if(!(hit is TerrainCollider)){blocked=true;break;}
+                    if(!(hit is TerrainCollider) && !XunjuuSceneVisualPolicy.IsSoftDecoration(hit.transform)){blocked=true;break;}
+                if(blocked)continue;
+                Vector3 door = candidate + buildingRotation * (new Vector3(-1.35f,0,-localSize.z*.5f-(models[i].Contains("Corredor")?2.3f:.7f))*houseScale);
+                Vector3 junction = XunjuuSettlementPlan.MainPathAt(door.z);
+                for (int step=0;step<=30;step++)
+                {
+                    Vector3 point=Vector3.Lerp(door,junction,step/30f);
+                    foreach (Bounds existing in buildings) if(XunjuuSettlementPlan.ContainsXZ(existing,point,1.2f)){blocked=true;break;}
+                    if (XunjuuSettlementPlan.ContainsXZ(XunjuuSettlementPlan.HerbGarden,point,1.2f)) blocked=true;
+                    foreach(Collider hit in Physics.OverlapSphere(point+Vector3.up*.5f,.8f,~0,QueryTriggerInteraction.Ignore))
+                        if(!(hit is TerrainCollider) && !XunjuuSceneVisualPolicy.IsSoftDecoration(hit.transform)){blocked=true;break;}
+                    if (blocked) break;
+                }
                 if(blocked)continue;
                 p=candidate;found=true;break;
             }
@@ -159,12 +182,17 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
             XunjuuWorldScale.SetUniformWorldScale(house.transform,houseScale);
             house.transform.position=p;
             // Front doors face the initial clearing, rather than a random rear wall.
-            Vector3 face=origin-p;face.y=0;
+            Vector3 face=XunjuuSettlementPlan.MainPathAt(p.z)-p;face.y=0;
             house.transform.rotation=Quaternion.LookRotation(-face.normalized,Vector3.up);
             var collider=house.AddComponent<BoxCollider>();
             collider.center=new Vector3(0,localSize.y*.5f,0);collider.size=localSize;
             Physics.SyncTransforms();
             Bounds footprint=house.GetComponent<Renderer>().bounds;footprint.Expand(new Vector3(2,0,2));buildings.Add(footprint);
+            XunjuuSettlementPlan.Houses.Add(footprint);
+            Vector3 doorstep = p + house.transform.rotation * (new Vector3(-1.35f,0,-localSize.z*.5f-(models[i].Contains("Corredor")?2.3f:.7f))*houseScale);
+            var access = new XunjuuSettlementPlan.Access {door=doorstep,junction=XunjuuSettlementPlan.MainPathAt(doorstep.z),width=1.05f};
+            XunjuuSettlementPlan.Accesses.Add(access);
+            BuildAccessPath(house.transform.parent, access, i);
             for(int pot=0;pot<4;pot++)
             {
                 var shrub=XunjuuArtMeshes.Create("Arbusto",house.transform,"Jardin_Lateral");
@@ -174,15 +202,77 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
             }
         }
     }
+
+    private void BuildAccessPath(Transform parent, XunjuuSettlementPlan.Access access, int index)
+    {
+        var builder = new XunjuuArtMeshes.Builder(3071+index);
+        Vector3 direction=(access.junction-access.door).normalized;
+        Vector3 side=new Vector3(direction.z,0,-direction.x)*access.width;
+        int steps=Mathf.Max(2,Mathf.CeilToInt(Vector3.Distance(access.door,access.junction)/.55f));
+        for(int i=0;i<steps;i++)
+        {
+            Vector3 a=Vector3.Lerp(access.door,access.junction,i/(float)steps),b=Vector3.Lerp(access.door,access.junction,(i+1)/(float)steps);
+            for(int strip=0;strip<6;strip++)
+            {
+                float l=Mathf.Lerp(-1,1,strip/6f),r=Mathf.Lerp(-1,1,(strip+1)/6f);
+                Vector3 al=a+side*l,ar=a+side*r,bl=b+side*l,br=b+side*r;
+                if(!Ground(al,out float ay)||!Ground(ar,out float ry)||!Ground(bl,out float by)||!Ground(br,out float dy))continue;
+                al.y=ay+.09f;ar.y=ry+.09f;bl.y=by+.09f;br.y=dy+.09f;
+                builder.Quad(al,bl,br,ar,Color.white);
+            }
+        }
+        var go=new GameObject("Acceso_Casa_"+(index+1),typeof(MeshFilter),typeof(MeshRenderer));go.transform.SetParent(parent,false);
+        Mesh mesh=builder.Build(go.name); accessMeshes.Add(mesh); go.GetComponent<MeshFilter>().sharedMesh=mesh;
+        go.GetComponent<MeshRenderer>().sharedMaterial=GetPathMaterial();
+        go.GetComponent<MeshRenderer>().shadowCastingMode=ShadowCastingMode.Off;
+    }
+
+    private void BuildMainPath()
+    {
+        var builder=new XunjuuArtMeshes.Builder(4109);
+        for(float z=origin.z-165f;z<origin.z+165f;z+=.5f)
+        {
+            Vector3 a=XunjuuSettlementPlan.MainPathAt(z),b=XunjuuSettlementPlan.MainPathAt(z+.5f);
+            float width=2.2f+Mathf.Sin(z*.23f)*.10f;
+            for(int strip=0;strip<12;strip++)
+            {
+                float l=Mathf.Lerp(-width,width,strip/12f),r=Mathf.Lerp(-width,width,(strip+1)/12f);
+                Vector3 al=a+Vector3.right*l,ar=a+Vector3.right*r,bl=b+Vector3.right*l,br=b+Vector3.right*r;
+                if(!Ground(al,out float ay)||!Ground(ar,out float ry)||!Ground(bl,out float by)||!Ground(br,out float dy))continue;
+                al.y=ay+.09f;ar.y=ry+.09f;bl.y=by+.09f;br.y=dy+.09f;
+                builder.Quad(al,bl,br,ar,Color.white);
+            }
+        }
+        var go=new GameObject("Camino_Principal_Aldea",typeof(MeshFilter),typeof(MeshRenderer));go.transform.SetParent(transform,false);
+        Mesh mesh=builder.Build(go.name);accessMeshes.Add(mesh);go.GetComponent<MeshFilter>().sharedMesh=mesh;
+        go.GetComponent<MeshRenderer>().sharedMaterial=GetPathMaterial();go.GetComponent<MeshRenderer>().shadowCastingMode=ShadowCastingMode.Off;
+    }
+
+    private Material pathMaterial;
+    private readonly List<Mesh> accessMeshes=new List<Mesh>();
+    private Material GetPathMaterial()
+    {
+        if(pathMaterial==null)pathMaterial=new Material(Shader.Find("Xunjuu/FootpathSoil")){name="Tierra_Compactada_Grava"};
+        return pathMaterial;
+    }
+
+    private void ReleasePatch(GameObject patch)
+    {
+        if(patch==null)return;
+        foreach(var filter in patch.GetComponentsInChildren<MeshFilter>())if(filter.sharedMesh!=null)Destroy(filter.sharedMesh);
+        Destroy(patch);
+    }
     private void BuildPatch(Vector2Int key)
     {
         int seed=unchecked(key.x*73856093 ^ key.y*19349663 ^ 60908);
         var b=new XunjuuArtMeshes.Builder(seed);
+        var road=new XunjuuArtMeshes.Builder(seed);
         var go=new GameObject("Pradera_"+key.x+"_"+key.y,typeof(MeshFilter),typeof(MeshRenderer));
         go.transform.SetParent(transform,false);chunks[key]=go;
         for(int segment=0;segment<40;segment++)
         {
             float z=key.y*Cell+segment*.5f;
+            if(Mathf.Abs(z-origin.z)<165f)continue; // El tramo de la aldea ya es persistente.
             float x=origin.x+Mathf.Sin((z-origin.z)*.018f)*10;
             if(x+2.5f<key.x*Cell || x-2.5f>=(key.x+1)*Cell)continue;
             float nextX=origin.x+Mathf.Sin((z+.5f-origin.z)*.018f)*10;
@@ -205,7 +295,7 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
                 Color soil=Color.Lerp(new Color(.55f,.43f,.27f),new Color(.61f,.49f,.32f),grain);
                 if(strip==0||strip==7)soil=Color.Lerp(soil,new Color(.36f,.40f,.21f),.48f);
                 if(strip==2||strip==5)soil*=.96f;
-                b.Quad(a,e,d,c,soil);
+                road.Quad(a,e,d,c,Color.white);
                 // Low flat stones add irregular detail without solid obstacles.
                 if(grain>.59f && ar-al>.1f)
                 {
@@ -222,12 +312,12 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
         for(int cluster=0;cluster<(ring<=4?18:8);cluster++)
         {
             Vector3 center=new Vector3((key.x+b.Range(.05f,.95f))*Cell,0,(key.y+b.Range(.05f,.95f))*Cell);
-            if(!Ground(center,out float y)||InBuilding(center)||OnPath(center))continue;
+            if(!Ground(center,out float y)||XunjuuSettlementPlan.Reserved(center,1f))continue;
             center.y=y;
             for(int tuft=0;tuft<9;tuft++)
             {
                 Vector3 p=center+new Vector3(b.Range(-2.5f,2.5f),0,b.Range(-2.5f,2.5f));
-                if(!Ground(p,out float ground)||OnPath(p)||InBuilding(p))continue;p.y=ground+.015f;
+                if(!Ground(p,out float ground)||XunjuuSettlementPlan.Reserved(p,.6f))continue;p.y=ground+.015f;
                 XunjuuArtMeshes.Grass(b,p,b.Range(.8f,1.65f));
                 if(tuft==0)XunjuuArtMeshes.Fern(b,p,b.Range(.7f,1.25f));
                 if(tuft==1&&cluster%4==0)XunjuuArtMeshes.Bush(b,p,b.Range(.7f,1.1f));
@@ -248,7 +338,7 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
         for(int prop=0;prop<3;prop++)
         {
             Vector3 point=new Vector3((key.x+b.Range(.12f,.88f))*Cell,0,(key.y+b.Range(.12f,.88f))*Cell);
-            if(!Ground(point,out float ground)||InBuilding(point)||OnPath(point))continue;
+            if(!Ground(point,out float ground)||XunjuuSettlementPlan.Reserved(point,2f))continue;
             string[] types={"Tronco_Caido","Tocon_Raices","Arbusto_Florido","Arbusto_Bayas"};
             string model=types[Mathf.Min(3,(int)b.Range(0,4))];
             Quaternion rotation=Quaternion.Euler(0,b.Range(0,360),0);
@@ -264,6 +354,10 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
         var mesh=b.Build(go.name);go.GetComponent<MeshFilter>().sharedMesh=mesh;
         var renderer=go.GetComponent<MeshRenderer>();renderer.sharedMaterial=XunjuuArtMeshes.Material;
         renderer.shadowCastingMode=ShadowCastingMode.Off;renderer.receiveShadows=true;
+        var roadObject=new GameObject("Camino_Texturizado",typeof(MeshFilter),typeof(MeshRenderer));roadObject.transform.SetParent(go.transform,false);
+        roadObject.GetComponent<MeshFilter>().sharedMesh=road.Build("Tierra_"+key);
+        roadObject.GetComponent<MeshRenderer>().sharedMaterial=GetPathMaterial();
+        roadObject.GetComponent<MeshRenderer>().shadowCastingMode=ShadowCastingMode.Off;
     }
     private bool FitWoodToGround(string model,ref Vector3 point,ref Quaternion rotation,float scale)
     {
@@ -318,8 +412,7 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
     }
     private bool OnPath(Vector3 p)
     {
-        Vector3 relative=p-origin;
-        return Mathf.Abs(relative.x-Mathf.Sin(relative.z*.018f)*10)<2.5f || new Vector2(relative.x,relative.z).sqrMagnitude<16f;
+        return XunjuuSettlementPlan.OnPath(p) || new Vector2(p.x-origin.x,p.z-origin.z).sqrMagnitude<16f;
     }
     private bool Ground(Vector3 p,out float y)
     {
@@ -335,8 +428,10 @@ public sealed class XunjuuMeadowDressing : MonoBehaviour
     }
     private void OnDestroy()
     {
-        foreach(var entry in chunks)if(entry.Value!=null){var f=entry.Value.GetComponent<MeshFilter>();if(f!=null)Destroy(f.sharedMesh);}
+        foreach(var entry in chunks)ReleasePatch(entry.Value);
+        foreach(var mesh in accessMeshes)if(mesh!=null)Destroy(mesh);
         if(sky!=null)Destroy(sky);
+        if(pathMaterial!=null)Destroy(pathMaterial);
         if(floraVariants!=null)foreach(var sprite in floraVariants)if(sprite!=null)Destroy(sprite);
         Shader.SetGlobalVector("_XunjuuPlayerPosition",Vector4.zero);
     }

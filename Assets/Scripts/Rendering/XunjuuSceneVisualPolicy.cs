@@ -22,6 +22,7 @@ public sealed class XunjuuSceneVisualPolicy : MonoBehaviour
     public static bool IsSoftDecoration(Transform t)
     {
         if(IsActor(t) || t.GetComponentInParent<TreeInteractivo>()!=null)return false;
+        if(t.GetComponentInParent<XunjuuMedicinalPlant>()!=null)return true;
         if(t.GetComponentInParent<MazahuaWordCollectible>()!=null)return true;
         for(Transform p=t;p!=null;p=p.parent)
         {

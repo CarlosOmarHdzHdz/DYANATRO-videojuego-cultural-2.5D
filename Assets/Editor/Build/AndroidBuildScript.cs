@@ -94,8 +94,7 @@ public static class AndroidBuildScript
     {
         if (!BuildPipeline.IsBuildTargetSupported(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64))
         {
-            Debug.LogError("Xunjuu v0.1: falta Windows Build Support en Unity Hub.");
-            return;
+            throw new BuildFailedException("Xunjuu v0.1: falta Windows Build Support en Unity Hub.");
         }
 
         string windowsPlayerPath = Path.Combine(
@@ -112,24 +111,34 @@ public static class AndroidBuildScript
                 "Xunjuu v0.1: Windows Build Support esta incompleto. " +
                 "Agrega el modulo Windows Build Support (Mono) a Unity 6000.3.11f1 desde Unity Hub."
             );
-            EditorUtility.DisplayDialog(
+            if (!Application.isBatchMode) EditorUtility.DisplayDialog(
                 "Falta Windows Build Support",
                 "El proyecto esta preparado, pero esta instalacion de Unity no contiene WindowsPlayer.exe.\n\n" +
                 "En Unity Hub abre Installs > Unity 6000.3.11f1 > Add modules e instala " +
                 "Windows Build Support (Mono). Despues vuelve a usar Build > Xunjuu > Build Windows EXE.",
                 "Entendido"
             );
-            return;
+            throw new BuildFailedException("Windows Build Support incompleto: " + windowsPlayerPath);
         }
 
         string projectRoot = Directory.GetParent(Application.dataPath).FullName;
         string outputPath = Path.Combine(projectRoot, WindowsOutputDirectory, WindowsOutputFile);
+        string[] arguments = System.Environment.GetCommandLineArgs();
+        for (int i = 0; i < arguments.Length - 1; i++)
+        {
+            if (arguments[i] == "-dyanatroOutput")
+                outputPath = Path.GetFullPath(arguments[i + 1]);
+        }
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath));
 
         ConfigureCommonPlayerSettings();
-        EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64);
+        if (!EditorUserBuildSettings.SwitchActiveBuildTarget(BuildTargetGroup.Standalone, BuildTarget.StandaloneWindows64))
+            throw new BuildFailedException("No se pudo activar Windows de 64 bits.");
         // Xunjuu v0.1 - ACCION: Mono evita exigir el modulo Windows IL2CPP.
         PlayerSettings.SetScriptingBackend(NamedBuildTarget.Standalone, ScriptingImplementation.Mono2x);
+        // Distribucion completa: no eliminar codigo administrado ni modulos del motor.
+        PlayerSettings.SetManagedStrippingLevel(NamedBuildTarget.Standalone, ManagedStrippingLevel.Disabled);
+        PlayerSettings.stripEngineCode = false;
         ApplyWindowsIcon();
         BuildPlayerOptions options = new BuildPlayerOptions
         {
@@ -141,9 +150,13 @@ public static class AndroidBuildScript
 
         BuildReport report = BuildPipeline.BuildPlayer(options);
         if (report.summary.result == BuildResult.Succeeded)
+        {
             Debug.Log("[XUNJUU BUILD PASS] EXE generado: " + outputPath);
+            Debug.Log("[XUNJUU BUILD CONTENT] Escenas: " + string.Join(", ", options.scenes)
+                + "; sin recorte de codigo; bytes: " + report.summary.totalSize);
+        }
         else
-            Debug.LogError("Xunjuu v0.1: no se pudo generar el EXE. Resultado: " + report.summary.result);
+            throw new BuildFailedException("Xunjuu v0.1: no se pudo generar el EXE. Resultado: " + report.summary.result);
     }
 
     // ACCION: dejar SampleScene habilitada para que otra PC compile sin ajustes.

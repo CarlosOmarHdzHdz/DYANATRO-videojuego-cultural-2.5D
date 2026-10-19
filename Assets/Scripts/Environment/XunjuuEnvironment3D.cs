@@ -55,7 +55,8 @@ public sealed class XunjuuEnvironment3D : MonoBehaviour
             bool isTree = tree != null || name.Contains("arbol") || name.Contains("tree");
             bool isCorn = name.Contains("maiz") || name.Contains("milpa");
             bool isFlower = sprite.GetComponentInParent<MazahuaWordCollectible>() != null;
-            if (!isTree && !isCorn && !isFlower) continue;
+            // Maíz y flores conservan sus sprites; no convertirlos en modelos genéricos.
+            if (!isTree || isCorn || isFlower) continue;
             Transform owner = tree != null ? tree.transform : sprite.transform;
             if (!converted.Add(owner.GetInstanceID())) continue;
             GameObject prefab = isTree ? catalog.trees[trees.Count % catalog.trees.Length]
