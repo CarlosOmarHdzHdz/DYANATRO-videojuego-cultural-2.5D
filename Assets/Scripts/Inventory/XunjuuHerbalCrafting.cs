@@ -16,6 +16,9 @@ public sealed class XunjuuHerbalCrafting : MonoBehaviour
     private int actualRecovered;
     private bool recovering;
     public bool IsRecovering => recovering;
+    public int CraftedCount { get; private set; }
+    public int UsedCount { get; private set; }
+    public int TotalRecovered { get; private set; }
     public string LastMessage { get; private set; } = "Receta ficticia: 2 manzanillas + 1 hierbabuena.";
     public bool CanCraft => inventory != null && inventory.GetAmount("manzanilla") >= 2 && inventory.GetAmount("hierbabuena") >= 1;
     private void Awake()
@@ -30,7 +33,8 @@ public sealed class XunjuuHerbalCrafting : MonoBehaviour
         if (!CanCraft) { LastMessage = "Faltan ingredientes: necesitas 2 manzanillas y 1 hierbabuena."; return false; }
         if (!inventory.TryExchange(ingredients, RemedyId, "Infusión de hierbas", XunjuuMedicinalPlantCatalog.RemedySprite))
         { LastMessage = "No hay espacio para el preparado. Los ingredientes se conservaron."; return false; }
-        LastMessage = "Preparado fabricado +1. Úsalo con H cuando te falte vida.";
+        CraftedCount++;
+        LastMessage = "Infusión preparada +1. Úsala con H cuando te falte vida.";
         return true;
     }
     public bool TryUseRemedy()
@@ -40,6 +44,7 @@ public sealed class XunjuuHerbalCrafting : MonoBehaviour
         if (player.GetCurrentHealth() >= player.GetMaxHealth()) { LastMessage = "Tu salud está completa; conserva el preparado."; return false; }
         if (inventory == null || !inventory.RemoveItem(RemedyId)) { LastMessage = "Fabrica un preparado en el morral [I]."; return false; }
         recovering = true; elapsed = 0; restored = 0; actualRecovered = 0;
+        UsedCount++;
         LastMessage = "Recuperando hasta 40 puntos de salud durante 5 segundos.";
         return true;
     }
@@ -57,7 +62,11 @@ public sealed class XunjuuHerbalCrafting : MonoBehaviour
         if (player == null || player.GetCurrentHealth() <= 0) { recovering = false; LastMessage = "Recuperación interrumpida por la derrota."; return; }
         elapsed = Mathf.Min(Duration, elapsed + deltaTime);
         int target = Mathf.FloorToInt(Recovery * elapsed / Duration);
-        if (target > restored) actualRecovered += player.RestoreHealth(target - restored);
+        if (target > restored)
+        {
+            int recovered = player.RestoreHealth(target - restored);
+            actualRecovered += recovered; TotalRecovered += recovered;
+        }
         restored = target;
         if (elapsed >= Duration || player.GetCurrentHealth() >= player.GetMaxHealth())
         { recovering = false; LastMessage = "Recuperación finalizada: +" + actualRecovered + " puntos de salud."; }

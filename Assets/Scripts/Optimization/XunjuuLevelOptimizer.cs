@@ -20,9 +20,15 @@ public sealed class XunjuuLevelOptimizer : MonoBehaviour
         public XunjuuHitInteractable interactable;
         public Renderer[] renderers;
         public Collider[] colliders;
+        public bool[] softColliders;
+        public int childCount;
     }
 
     private readonly List<Entry> entries = new List<Entry>();
+    private readonly Dictionary<int,Entry> componentCache=new Dictionary<int,Entry>();
+    private readonly HashSet<int> liveObjects=new HashSet<int>();
+    private readonly List<int> expiredObjects=new List<int>();
+    public int ComponentCacheBuilds { get; private set; }
     private Transform player;
     private float nextUpdate;
     private float nextRefresh;
@@ -36,6 +42,7 @@ public sealed class XunjuuLevelOptimizer : MonoBehaviour
 
     private void Update()
     {
+        if (Time.timeScale <= 0f) return;
         if (Time.unscaledTime >= nextRefresh)
             RefreshObjects();
 
@@ -52,29 +59,47 @@ public sealed class XunjuuLevelOptimizer : MonoBehaviour
     {
         ResolvePlayer();
         entries.Clear();
+        liveObjects.Clear();
         XunjuuHitInteractable[] interactables = FindObjectsByType<XunjuuHitInteractable>(FindObjectsInactive.Include, FindObjectsSortMode.None);
         foreach (XunjuuHitInteractable interactable in interactables)
         {
             if (interactable == null)
                 continue;
 
+            int id=interactable.GetInstanceID();liveObjects.Add(id);
+            if(componentCache.TryGetValue(id,out Entry cached)&&cached.interactable==interactable&&cached.childCount==interactable.transform.childCount)
+            {entries.Add(cached);continue;}
+
             List<Renderer> optimizedRenderers = new List<Renderer>();
             foreach (Renderer renderer in interactable.GetComponentsInChildren<Renderer>(true))
             {
+                if(renderer is SpriteRenderer&&renderer.GetComponentInParent<XunjuuRegionalTree>()!=null)continue;
                 if (renderer != null && renderer.GetComponent<TextMesh>() == null)
                     optimizedRenderers.Add(renderer);
             }
 
-            entries.Add(new Entry
+            Collider[] colliders = interactable.GetComponentsInChildren<Collider>(true);
+            bool[] softColliders = new bool[colliders.Length];
+            for (int i = 0; i < colliders.Length; i++)
+                softColliders[i] = XunjuuSceneVisualPolicy.IsSoftDecoration(colliders[i].transform);
+            var entry=new Entry
             {
                 interactable = interactable,
                 renderers = optimizedRenderers.ToArray(),
-                colliders = interactable.GetComponentsInChildren<Collider>(true)
-            });
+                colliders = colliders,
+                softColliders = softColliders,
+                childCount=interactable.transform.childCount
+            };
+            componentCache[id]=entry;entries.Add(entry);ComponentCacheBuilds++;
         }
+        expiredObjects.Clear();foreach(int id in componentCache.Keys)if(!liveObjects.Contains(id))expiredObjects.Add(id);
+        foreach(int id in expiredObjects)componentCache.Remove(id);
 
         nextRefresh = Time.unscaledTime + refreshObjectsInterval;
     }
+
+    // Llamar si una herramienta cambia componentes dentro de una jerarquía existente.
+    public void InvalidateObjectCache(){componentCache.Clear();nextRefresh=0;}
 
     private void ResolvePlayer()
     {
@@ -110,11 +135,12 @@ public sealed class XunjuuLevelOptimizer : MonoBehaviour
                 if (renderer.enabled != visible)
                     renderer.enabled = visible;
             }
-            foreach (Collider collider in entry.colliders)
+            for (int i = 0; i < entry.colliders.Length; i++)
             {
+                Collider collider = entry.colliders[i];
                 if(collider==null)continue;
                 bool enabledForCollision=collisionEnabled;
-                if(XunjuuSceneVisualPolicy.IsSoftDecoration(collider.transform))
+                if(entry.softColliders[i])
                 {if(collider is MeshCollider mesh && !mesh.convex)enabledForCollision=false;else collider.isTrigger=true;}
                 if (collider.enabled != enabledForCollision)collider.enabled = enabledForCollision;
             }

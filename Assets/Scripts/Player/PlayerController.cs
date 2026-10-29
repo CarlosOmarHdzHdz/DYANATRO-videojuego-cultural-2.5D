@@ -75,6 +75,7 @@ public class PlayerController : MonoBehaviour
     private AudioSource audioSource;
     private AudioSource attackAudioSource;
     private BarraVidaFrames barraVida;
+    private XunjuuPlayerHitFeedback hitFeedback;
 
     [Header("=== SONIDOS ===")]
     [SerializeField] private AudioClip attackSound;
@@ -116,7 +117,8 @@ public class PlayerController : MonoBehaviour
 
     void Awake()
     {
-        currentHealth = maxHealth = 100;
+        maxHealth = Mathf.Max(1, maxHealth);
+        currentHealth = maxHealth;
     }
 
     void Start()
@@ -125,6 +127,8 @@ public class PlayerController : MonoBehaviour
         spriteRenderer = GetComponent<SpriteRenderer>();
         animator = GetComponent<Animator>();
         audioSource = GetComponent<AudioSource>();
+        hitFeedback = GetComponent<XunjuuPlayerHitFeedback>();
+        if (hitFeedback == null) hitFeedback = gameObject.AddComponent<XunjuuPlayerHitFeedback>();
 
         if (animator != null && animator.runtimeAnimatorController == null)
             animator = null;
@@ -132,13 +136,8 @@ public class PlayerController : MonoBehaviour
         barraVida = FindFirstObjectByType<BarraVidaFrames>(FindObjectsInactive.Include);
         if (barraVida != null)
         {
-            currentHealth = maxHealth;
             barraVida.EstablecerMaxima(maxHealth);
             barraVida.EstablecerVida(currentHealth);
-        }
-        else
-        {
-            currentHealth = maxHealth;
         }
 
         if (audioSource == null)
@@ -262,6 +261,8 @@ public class PlayerController : MonoBehaviour
     {
         if (isDead)
             return;
+        // Los clics de la ludoteca, del morral o de pausa no son ataques del mundo.
+        if(Time.timeScale<=0f){moveInput=Vector3.zero;IsMovingBackward=false;return;}
 
         if (groundCheckPoint != null && groundCheckPoint.parent != transform)
         {
@@ -897,7 +898,13 @@ public class PlayerController : MonoBehaviour
         if (isDead)
             return;
 
+        int previousHealth = currentHealth;
         currentHealth = Mathf.Clamp(newHealth, 0, maxHealth);
+        if (currentHealth < previousHealth && currentHealth > 0 && Application.isPlaying)
+        {
+            if (hitFeedback == null) hitFeedback = GetComponent<XunjuuPlayerHitFeedback>() ?? gameObject.AddComponent<XunjuuPlayerHitFeedback>();
+            hitFeedback.PlayHit(previousHealth - currentHealth, maxHealth);
+        }
 
         if (barraVida != null)
         {

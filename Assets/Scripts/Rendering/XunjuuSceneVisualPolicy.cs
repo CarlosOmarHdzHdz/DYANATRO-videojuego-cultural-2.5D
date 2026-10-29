@@ -9,6 +9,9 @@ public sealed class XunjuuSceneVisualPolicy : MonoBehaviour
 {
     public const float OccludedVisibility=.24f;
     private readonly HashSet<int> visited=new HashSet<int>();
+    private readonly HashSet<int> visitedColliders=new HashSet<int>();
+    public int ClassifiedRenderers { get; private set; }
+    public int ClassifiedColliders { get; private set; }
     private readonly Dictionary<Material,Material> foliageMaterials=new Dictionary<Material,Material>();
     private Material spriteMaterial;
     private Material actorMaterial;
@@ -37,19 +40,34 @@ public sealed class XunjuuSceneVisualPolicy : MonoBehaviour
         spriteMaterial=new Material(Shader.Find("Xunjuu/AtlasSprite")){name="Flora_Alpha_Uniforme",renderQueue=2900};
         spriteMaterial.SetFloat("_KeyMode",2);
         actorMaterial=new Material(spriteMaterial){name="Fauna_Alpha_Uniforme",renderQueue=3000};
-        while(enabled){Refresh();yield return new WaitForSecondsRealtime(1f);}
+        bool worldSettled=false;
+        while(enabled)
+        {
+            if(Time.timeScale>0||!worldSettled)Refresh();
+            if(!worldSettled)
+            {
+                var environment=GetComponent<XunjuuEnvironment3D>();var meadow=GetComponent<XunjuuMeadowDressing>();
+                worldSettled=environment!=null&&environment.TreeClearanceReady&&meadow!=null&&meadow.PatchCount>=81;
+            }
+            yield return new WaitForSecondsRealtime(1f);
+        }
     }
     public void Refresh()
     {
         foreach(Collider c in FindObjectsByType<Collider>(FindObjectsInactive.Include,FindObjectsSortMode.None))
+        {
+            if(!visitedColliders.Add(c.GetInstanceID()))continue;
+            ClassifiedColliders++;
             if(!(c is TerrainCollider) && IsSoftDecoration(c.transform) && !c.isTrigger)
             {if(c is MeshCollider mesh && !mesh.convex)c.enabled=false;else c.isTrigger=true;SoftColliderCount++;}
+        }
         foreach(Renderer r in FindObjectsByType<Renderer>(FindObjectsInactive.Include,FindObjectsSortMode.None))
         {
-            if(visited.Contains(r.GetInstanceID()) || r is TrailRenderer || r.GetComponent<TextMesh>()!=null)continue;
+            if(!visited.Add(r.GetInstanceID()) || r is TrailRenderer || r.GetComponent<TextMesh>()!=null)continue;
+            ClassifiedRenderers++;
             if(r is SpriteRenderer actor && IsActor(r.transform) && r.GetComponentInParent<PlayerController>()==null)
             {
-                visited.Add(r.GetInstanceID());actor.sharedMaterial=actorMaterial;Color c=actor.color;c.a=1;actor.color=c;
+                actor.sharedMaterial=actorMaterial;Color c=actor.color;c.a=1;actor.color=c;
                 var sorting=actor.GetComponent<DyanatroSpriteDepthSorter>()??actor.gameObject.AddComponent<DyanatroSpriteDepthSorter>();sorting.Configure(12000,10);continue;
             }
             if(!IsSoftDecoration(r.transform))continue;

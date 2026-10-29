@@ -62,7 +62,7 @@ public sealed class XunjuuBossHealthBar : MonoBehaviour
         GameObject titleObject = new GameObject("Nombre");
         titleObject.transform.SetParent(transform, false);
         titleText = titleObject.AddComponent<Text>();
-        titleText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        titleText.font = XunjuuTypography.Regular;
         titleText.fontStyle = FontStyle.Bold;
         titleText.fontSize = 18;
         titleText.alignment = TextAnchor.MiddleCenter;
@@ -78,7 +78,7 @@ public sealed class XunjuuBossHealthBar : MonoBehaviour
         GameObject valueObject = new GameObject("Vida_Numerica");
         valueObject.transform.SetParent(border.transform, false);
         valueText = valueObject.AddComponent<Text>();
-        valueText.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        valueText.font = XunjuuTypography.Regular;
         valueText.fontStyle = FontStyle.Bold;
         valueText.fontSize = 15;
         valueText.alignment = TextAnchor.MiddleCenter;

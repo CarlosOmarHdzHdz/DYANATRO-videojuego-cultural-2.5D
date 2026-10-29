@@ -17,12 +17,12 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
     private enum Page { Home, Culture, Gallery, Fauna, Language, MiniGame, Survey, Plants }
 
     // Tintes del prototipo entregado: manta, añil, grana, maíz y madera oscura.
-    private static readonly Color ForestBackground = new Color(0.095f, 0.075f, 0.061f, 0.99f);
-    private static readonly Color ForestDeep = new Color(0.141f, 0.114f, 0.102f, 1f);
+    private static readonly Color ForestBackground = new Color(0.045f, 0.105f, 0.09f, 1f);
+    private static readonly Color ForestDeep = new Color(0.09f, 0.17f, 0.14f, 1f);
     private static readonly Color ForestGreen = new Color(0.16f, 0.34f, 0.26f, 1f);
     private static readonly Color ForestGreenLight = new Color(0.235f, 0.42f, 0.29f, 1f);
-    private static readonly Color Parchment = new Color(0.949f, 0.914f, 0.847f, 1f);
-    private static readonly Color ParchmentShade = new Color(0.914f, 0.863f, 0.761f, 1f);
+    private static readonly Color Parchment = new Color(0.969f, 0.957f, 0.925f, 1f);
+    private static readonly Color ParchmentShade = new Color(0.875f, 0.882f, 0.827f, 1f);
     private static readonly Color Gold = new Color(0.788f, 0.541f, 0.173f, 1f);
     private static readonly Color GoldDark = new Color(0.39f, 0.27f, 0.16f, 1f);
     private static readonly Color TextileGrana = new Color(0.639f, 0.192f, 0.165f, 1f);
@@ -87,8 +87,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
     private GameObject readingOverlay;
     private TMP_Text pageTitle;
     private TMP_Text pageBody;
-    private TMP_Text addressText;
-    private TMP_Text tabTitle;
+    private TMP_Text pageSubtitle, pageOverline;
     private TMP_Text statusText;
     private Image pageAccentBar;
     private TMP_Text miniGameText;
@@ -110,6 +109,10 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
     private int closedFrame = -10;
     private float previousTimeScale = 1f;
     private bool initialized;
+    private Camera suspendedWorldCamera;
+    private int worldCullingMask;
+    private CameraClearFlags worldClearFlags;
+    private Color worldBackground;
 
     public bool IsOpen => browserRoot != null && browserRoot.activeSelf;
     public bool BlocksPauseInput => IsOpen || Time.frameCount <= closedFrame + 1;
@@ -122,16 +125,29 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
         hostCanvas = canvas;
         BuildBrowser(tree, flower, cloud);
+        XunjuuInterfaceTheme.PolishButtons(browserRoot.transform);
         initialized = true;
     }
 
     public void Open()
     {
-        if (!initialized)
+        if (!initialized || IsOpen)
             return;
 
         previousTimeScale = Time.timeScale;
         Time.timeScale = 0f;
+        // La ludoteca es opaca y de pantalla completa: no renderizar el mundo detrás.
+        // Solo con uGUI overlay; una UI que use cámara conserva su renderizado.
+        if(hostCanvas.renderMode==RenderMode.ScreenSpaceOverlay)
+        {
+            var worldCamera=Camera.main;
+            if(worldCamera!=null&&worldCamera.enabled)
+            {
+                suspendedWorldCamera=worldCamera;worldCullingMask=worldCamera.cullingMask;
+                worldClearFlags=worldCamera.clearFlags;worldBackground=worldCamera.backgroundColor;
+                worldCamera.cullingMask=0;worldCamera.clearFlags=CameraClearFlags.SolidColor;worldCamera.backgroundColor=ForestBackground;
+            }
+        }
         browserRoot.SetActive(true);
         browserRoot.transform.SetAsLastSibling();
         if(browserEntrance!=null)StopCoroutine(browserEntrance);
@@ -142,7 +158,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
     public void Close()
     {
-        if (browserRoot == null)
+        if (browserRoot == null || !IsOpen)
             return;
         if(browserEntrance!=null){StopCoroutine(browserEntrance);browserEntrance=null;}
         if(pageEntrance!=null){StopCoroutine(pageEntrance);pageEntrance=null;}
@@ -151,16 +167,25 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         if(browserWindowRect!=null)browserWindowRect.localScale=Vector3.one;
         if(pageTitle!=null)pageTitle.rectTransform.localScale=Vector3.one;
         browserRoot.SetActive(false);
+        RestoreWorldCamera();
         Time.timeScale = previousTimeScale;
         closedFrame = Time.frameCount;
     }
 
     private void Update()
     {
+        if(!IsOpen)return;
         TickMemory();
         // En Android el boton fisico Atras produce Escape dentro de Unity.
-        if (IsOpen && Input.GetKeyDown(KeyCode.Escape))
+        if (Input.GetKeyDown(KeyCode.Escape))
+        {
+            if(readingOverlay!=null&&readingOverlay.activeSelf){CloseReading();return;}
+            if(faunaDetailRoot!=null){CloseFaunaDetails();return;}
+            if(plantDetailRoot!=null){ClosePlantDetails();return;}
+            if(activityRoot!=null){EndActivity();return;}
+            if(currentPage!=Page.Home){Back();return;}
             Close();
+        }
     }
 
     // ========================================================================
@@ -182,42 +207,35 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
         GameObject window = Panel(browserRoot.transform, "Ventana", ForestDeep);
         browserWindowRect=window.GetComponent<RectTransform>();
-        SetRect(window.GetComponent<RectTransform>(), new Vector2(0.025f, 0.035f), new Vector2(0.975f, 0.935f));
+        SetRect(window.GetComponent<RectTransform>(), new Vector2(0.018f, 0.025f), new Vector2(0.982f, 0.975f));
         AddOutline(window, GoldDark, 2f);
 
-        GameObject top = Panel(window.transform, "Barra_Navegador", ForestDeep);
-        SetRect(top.GetComponent<RectTransform>(), new Vector2(0f, 0.90f), Vector2.one);
-        AddOutline(top, GoldDark, 1f);
-        Button(top.transform, "<", new Vector2(0.035f, 0.5f), new Vector2(66f, 54f), Back, new Color(.29f,.23f,.20f,1f));
-        Button(top.transform, "INICIO", new Vector2(0.115f, 0.5f), new Vector2(140f, 54f), () => ShowPage(Page.Home), new Color(.29f,.23f,.20f,1f));
-        Button(top.transform, "X", new Vector2(0.96f, 0.5f), new Vector2(62f, 54f), Close, TextileGrana);
-
-        GameObject address = Panel(top.transform, "Direccion", new Color(.09f,.075f,.064f,1f));
-        SetRect(address.GetComponent<RectTransform>(), new Vector2(0.18f, 0.20f), new Vector2(0.86f, 0.80f));
-        AddOutline(address, new Color(.52f,.42f,.33f,.65f), 1f);
-        addressText = Text(address.transform, "xunjuu://ludoteca/inicio", 22, TextAnchor.MiddleLeft, ParchmentShade);
-        addressText.rectTransform.offsetMin = new Vector2(20f, 0f);
+        GameObject top = Panel(window.transform, "Cabecera_Ludoteca", ForestDeep);
+        SetRect(top.GetComponent<RectTransform>(), new Vector2(0f, 0.916f), Vector2.one);
+        TextBlock(top.transform,"LUDOTECA DIGITAL MAZAHUA",30,new Vector2(.27f,.64f),new Vector2(900,43),TextAnchor.MiddleLeft,Parchment).fontStyle=FontStyles.Bold;
+        TextBlock(top.transform,"DYANATR’O   /   MEMORIA, TERRITORIO Y APRENDIZAJE",15,new Vector2(.27f,.25f),new Vector2(900,28),TextAnchor.MiddleLeft,Gold);
+        Button(top.transform,"VOLVER",new Vector2(.825f,.5f),new Vector2(150,48),Back,ForestGreen);
+        Button(top.transform,"CERRAR",new Vector2(.93f,.5f),new Vector2(150,48),Close,TextileGrana);
 
         GameObject nav = Panel(window.transform, "Navegacion", ForestDeep);
-        SetRect(nav.GetComponent<RectTransform>(), new Vector2(0f, 0.055f), new Vector2(0.21f, 0.90f));
+        SetRect(nav.GetComponent<RectTransform>(), new Vector2(0f, 0.045f), new Vector2(0.205f, 0.916f));
         AddOutline(nav, GoldDark, 1f);
-        TextBlock(nav.transform, "LUDOTECA DIGITAL", 27, new Vector2(0.5f, 0.90f), new Vector2(340f, 48f), TextAnchor.MiddleCenter, Gold).fontStyle = FontStyles.Bold;
-        TextBlock(nav.transform, "ARCHIVO CULTURAL INTERACTIVO", 14, new Vector2(0.5f, 0.855f), new Vector2(340f, 26f), TextAnchor.MiddleCenter, ParchmentShade);
-        TextBlock(nav.transform, "EXPLORA  /  APRENDE  /  PRACTICA", 14, new Vector2(0.5f, 0.815f), new Vector2(340f, 26f), TextAnchor.MiddleCenter, Gold);
-        NavButton(nav.transform, "Cultura", 0.76f, Page.Culture);
-        NavButton(nav.transform, "Galería", 0.66f, Page.Gallery);
-        NavButton(nav.transform, "Fauna", 0.56f, Page.Fauna);
-        NavButton(nav.transform, "Herbolaria", 0.46f, Page.Plants);
-        NavButton(nav.transform, "Lengua mazahua", 0.36f, Page.Language);
-        NavButton(nav.transform, "Minijuegos", 0.26f, Page.MiniGame);
-        NavButton(nav.transform, "Evaluación", 0.16f, Page.Survey);
-        TextBlock(nav.transform, "07 SECCIONES  ·  03 ACTIVIDADES", 14, new Vector2(.5f,.085f), new Vector2(315f,27f), TextAnchor.MiddleCenter, ParchmentShade);
-        CreateCardIcon(nav.transform, ElementIcon(4), new Vector2(.5f,.04f), new Vector2(250f,30f));
+        CreateCardIcon(nav.transform,MemoryMotifSprite(4),new Vector2(.5f,.90f),new Vector2(80,80));
+        TextBlock(nav.transform,"EXPLORA LA CULTURA",20,new Vector2(.5f,.82f),new Vector2(330,36),TextAnchor.MiddleCenter,Parchment).fontStyle=FontStyles.Bold;
+        NavButton(nav.transform,"Inicio",.735f,Page.Home);
+        NavButton(nav.transform, "Cultura", .655f, Page.Culture);
+        NavButton(nav.transform, "Galería", .575f, Page.Gallery);
+        NavButton(nav.transform, "Fauna", .495f, Page.Fauna);
+        NavButton(nav.transform, "Herbolaria", .415f, Page.Plants);
+        NavButton(nav.transform, "Lengua mazahua", .335f, Page.Language);
+        NavButton(nav.transform, "Minijuegos", .255f, Page.MiniGame);
+        NavButton(nav.transform, "Evaluación", .175f, Page.Survey);
+        TextBlock(nav.transform, "08 ESPACIOS  ·  03 MINIJUEGOS", 14, new Vector2(.5f,.065f), new Vector2(330f,27f), TextAnchor.MiddleCenter, ParchmentShade);
         AddSidebarEmbroidery(nav.transform);
 
         GameObject content = Panel(window.transform, "Contenido", Parchment);
         contentFade=content.AddComponent<CanvasGroup>();
-        SetRect(content.GetComponent<RectTransform>(), new Vector2(0.21f, 0.055f), new Vector2(1f, 0.90f));
+        SetRect(content.GetComponent<RectTransform>(), new Vector2(0.205f, 0.045f), new Vector2(1f, 0.916f));
         AddOutline(content, ParchmentShade, 1f);
         pageAccentBar = Panel(content.transform, "Acento_Seccion", TextileGrana).GetComponent<Image>();
         SetRect(pageAccentBar.rectTransform, new Vector2(0f,.992f), Vector2.one);
@@ -226,8 +244,10 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         contentOrnaments.transform.SetParent(content.transform, false);
         SetRect(contentOrnaments.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
         AddContentOrnaments(contentOrnaments.transform);
-        pageTitle = TextBlock(content.transform, string.Empty, 42, new Vector2(0.5f, 0.91f), new Vector2(1260f, 90f), TextAnchor.MiddleCenter, GoldDark);
+        pageOverline=TextBlock(content.transform,"ARCHIVO CULTURAL / APRENDER EXPLORANDO",14,new Vector2(.5f,.974f),new Vector2(1260,26),TextAnchor.MiddleLeft,ForestGreen);
+        pageTitle = TextBlock(content.transform, string.Empty, 38, new Vector2(0.5f, 0.925f), new Vector2(1260f, 68f), TextAnchor.MiddleLeft, GoldDark);
         pageTitle.fontStyle = FontStyles.Bold;
+        pageSubtitle=TextBlock(content.transform,"",19,new Vector2(.5f,.862f),new Vector2(1260,40),TextAnchor.MiddleLeft,ForestDeep);
         readingOverlay = Panel(content.transform, "Lectura_Extendida", Parchment);
         SetRect(readingOverlay.GetComponent<RectTransform>(), new Vector2(.035f,.075f), new Vector2(.965f,.82f));
         AddOutline(readingOverlay, ParchmentShade, 2f);
@@ -251,34 +271,15 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         surveyRoot = BuildSurvey(content.transform);
 
         GameObject footer = Panel(window.transform, "Estado", ForestDeep);
-        SetRect(footer.GetComponent<RectTransform>(), Vector2.zero, new Vector2(1f, 0.055f));
-        statusText = Text(footer.transform, "ESPACIO CULTURAL DIGITAL     ·     EXPLORAR   /   APRENDER   /   RECORDAR", 18, TextAnchor.MiddleLeft, Gold);
+        SetRect(footer.GetComponent<RectTransform>(), Vector2.zero, new Vector2(1f, 0.045f));
+        statusText = Text(footer.transform, "ESPACIO CULTURAL DIGITAL     ·     EXPLORAR   /   APRENDER   /   RECORDAR", 17, TextAnchor.MiddleLeft, ParchmentShade);
         statusText.rectTransform.offsetMin = new Vector2(20f, 0f);
-        BuildBrowserTabs(browserRoot.transform);
         browserRoot.SetActive(false);
-    }
-
-    private void BuildBrowserTabs(Transform parent)
-    {
-        GameObject tabs = Panel(parent, "Pestanas", new Color(0f, 0f, 0f, 0f));
-        SetRect(tabs.GetComponent<RectTransform>(), new Vector2(0.045f, 0.94f), new Vector2(0.48f, 0.99f));
-        tabs.GetComponent<Image>().raycastTarget = false;
-
-        GameObject homeTab = Panel(tabs.transform, "Pestana_Inicio", new Color(0.84f, 0.82f, 0.74f, 1f));
-        SetRect(homeTab.GetComponent<RectTransform>(), new Vector2(0f, 0f), new Vector2(0.38f, 1f));
-        AddOutline(homeTab, ParchmentShade, 1f);
-        Text(homeTab.transform, "INICIO", 20, TextAnchor.MiddleCenter, ForestDeep).fontStyle = FontStyles.Bold;
-
-        GameObject routeTab = Panel(tabs.transform, "Pestana_Ruta", Parchment);
-        SetRect(routeTab.GetComponent<RectTransform>(), new Vector2(0.35f, 0f), Vector2.one);
-        AddOutline(routeTab, ParchmentShade, 1f);
-        tabTitle = Text(routeTab.transform, "xunjuu://ludoteca/inicio", 19, TextAnchor.MiddleLeft, ForestDeep);
-        tabTitle.rectTransform.offsetMin = new Vector2(18f, 0f);
     }
 
     private void NavButton(Transform parent, string label, float y, Page page)
     {
-        Button button = Button(parent, label, new Vector2(0.5f, y), new Vector2(310f, 62f), () => ShowPage(page), new Color(.20f,.16f,.14f,1f));
+        Button button = Button(parent, label, new Vector2(0.5f, y), new Vector2(310f, 62f), () => ShowPage(page), ForestDeep);
         navigationImages[page] = button.GetComponent<Image>();
         TMP_Text title = button.GetComponentInChildren<TMP_Text>();
         title.rectTransform.anchorMin = new Vector2(.31f, 0f);
@@ -308,7 +309,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         GameObject iconPlate = Panel(button.transform, "Placa_Icono", new Color(.12f,.09f,.075f,1f));
         SetRect(iconPlate.GetComponent<RectTransform>(), new Vector2(.035f,.10f), new Vector2(.25f,.90f));
         iconPlate.GetComponent<Image>().raycastTarget = false;
-        Sprite icon = NavigationIcon(page);
+        Sprite icon = page==Page.Home?MemoryMotifSprite(4):NavigationIcon(page);
         if (icon != null)
         {
             GameObject item = new GameObject("Icono_" + page, typeof(RectTransform), typeof(Image));
@@ -326,32 +327,24 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         foreach(float x in new[]{.018f,.982f})
         {
             GameObject rail=Panel(parent,"Hilo_Lateral",GoldDark);
-            SetRect(rail.GetComponent<RectTransform>(),new Vector2(x-.002f,.19f),new Vector2(x+.002f,.80f));
+            SetRect(rail.GetComponent<RectTransform>(),new Vector2(x-.002f,.14f),new Vector2(x+.002f,.775f));
             rail.GetComponent<Image>().raycastTarget=false;
             for(int i=0;i<8;i++)
-                CreateDiamond(parent,new Vector2(x,.215f+i*.078f),9f,
+                CreateDiamond(parent,new Vector2(x,.16f+i*.084f),7f,
                     i%3==0?TextileGrana:i%3==1?TextileBlue:Gold,ParchmentShade);
         }
         for(int i=0;i<9;i++)
         {
             float x=.10f+i*.10f;
             Color thread=i%3==0?TextileGrana:i%3==1?TextileBlue:Gold;
-            CreateDiamond(parent,new Vector2(x,.965f),10f,thread,ParchmentShade);
-            CreateDiamond(parent,new Vector2(x,.113f),9f,thread,ParchmentShade);
+            CreateDiamond(parent,new Vector2(x,.975f),7f,thread,ParchmentShade);
+            CreateDiamond(parent,new Vector2(x,.105f),7f,thread,ParchmentShade);
         }
     }
 
     private GameObject BuildHomeIntro(Transform parent)
     {
-        GameObject intro = Panel(parent, "Ruta_De_Aprendizaje", new Color(.99f,.97f,.92f,1f));
-        SetRect(intro.GetComponent<RectTransform>(), new Vector2(.055f,.665f), new Vector2(.945f,.795f));
-        AddOutline(intro, ParchmentShade, 2f);
-        CreateCardIcon(intro.transform, ElementIcon(3), new Vector2(.075f,.5f), new Vector2(94f,94f));
-        TextBlock(intro.transform, "RUTA DE APRENDIZAJE", 22, new Vector2(.38f,.72f),
-            new Vector2(470f,38f), TextAnchor.MiddleLeft, TextileGrana).fontStyle = FontStyles.Bold;
-        TextBlock(intro.transform, "Observa el territorio, explora sus fichas y practica con tres minijuegos.", 21,
-            new Vector2(.57f,.31f), new Vector2(900f,50f), TextAnchor.MiddleLeft, ForestDeep);
-        return intro;
+        return BuildLearningDashboard(parent);
     }
 
     private GameObject BuildCulturePage(Transform parent)
@@ -450,27 +443,29 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
             int column = index % 3;
             int row = index / 3;
             Vector2 anchor = new Vector2(.17f + column * .33f, row == 0 ? .70f : .27f);
-            GameObject card = Panel(root.transform, "Ficha_Fauna_" + entry.Id, new Color(1f, .98f, .90f, 1f));
+            GameObject card = Panel(root.transform, "Ficha_Fauna_" + entry.Id, new Color(.995f, .987f, .96f, 1f));
             RectTransform cardRect = card.GetComponent<RectTransform>();
             cardRect.anchorMin = anchor;
             cardRect.anchorMax = anchor;
             cardRect.pivot = new Vector2(.5f, .5f);
-            cardRect.sizeDelta = new Vector2(385f, 250f);
+            cardRect.sizeDelta = new Vector2(410f, 282f);
             cardRect.anchoredPosition = Vector2.zero;
-            AddOutline(card, column == 1 ? TextileBlue : column == 2 ? Gold : TextileGrana, 4f);
+            AddOutline(card, ParchmentShade, 1.5f);
+            var band=Panel(card.transform,"Hilo_Fauna",column==1?TextileBlue:column==2?Gold:TextileGrana);
+            SetRect(band.GetComponent<RectTransform>(),new Vector2(0,.985f),Vector2.one);band.GetComponent<Image>().raycastTarget=false;
 
             GameObject visual = new GameObject("Retrato", typeof(RectTransform), typeof(Image));
             visual.transform.SetParent(card.transform, false);
-            SetRect(visual.GetComponent<RectTransform>(), new Vector2(.035f, .16f), new Vector2(.44f, .90f));
+            SetRect(visual.GetComponent<RectTransform>(), new Vector2(.035f, .22f), new Vector2(.48f, .72f));
             Image image = visual.GetComponent<Image>();
             image.sprite = XunjuuFaunaCatalog.GetSprite(entry);
             image.preserveAspect = true;
             image.raycastTarget = false;
 
-            TMP_Text name = TextBlock(card.transform, entry.DisplayName.ToUpperInvariant(), 22, new Vector2(.71f, .78f), new Vector2(205f, 54f), TextAnchor.MiddleCenter, GoldDark);
+            TMP_Text name = TextBlock(card.transform, entry.DisplayName.ToUpperInvariant(), 23, new Vector2(.5f, .86f), new Vector2(370f, 58f), TextAnchor.MiddleCenter, ForestGreen);
             name.fontStyle = FontStyles.Bold;
-            TMP_Text details = TextBlock(card.transform, string.Empty, 16, new Vector2(.71f, .47f), new Vector2(205f, 105f), TextAnchor.UpperLeft, ForestDeep);
-            TMP_Text status = TextBlock(card.transform, string.Empty, 18, new Vector2(.71f, .14f), new Vector2(205f, 42f), TextAnchor.MiddleCenter, ForestGreen);
+            TMP_Text details = TextBlock(card.transform, string.Empty, 18, new Vector2(.74f, .455f), new Vector2(184f, 132f), TextAnchor.UpperLeft, ForestDeep);
+            TMP_Text status = TextBlock(card.transform, string.Empty, 18, new Vector2(.5f, .105f), new Vector2(370f, 31f), TextAnchor.MiddleCenter, ForestGreen);
             status.fontStyle = FontStyles.Bold;
             Button expand=card.AddComponent<Button>();
             expand.targetGraphic=card.GetComponent<Image>();
@@ -499,7 +494,13 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
     }
 
     private void OnEnable() { XunjuuFaunaCatalog.CollectionChanged+=OnFaunaUnlocked; XunjuuMedicinalPlantCatalog.CollectionChanged+=OnPlantUnlocked; }
-    private void OnDisable() { XunjuuFaunaCatalog.CollectionChanged-=OnFaunaUnlocked; XunjuuMedicinalPlantCatalog.CollectionChanged-=OnPlantUnlocked; }
+    private void OnDisable() { XunjuuFaunaCatalog.CollectionChanged-=OnFaunaUnlocked; XunjuuMedicinalPlantCatalog.CollectionChanged-=OnPlantUnlocked;RestoreWorldCamera(); }
+    private void RestoreWorldCamera()
+    {
+        if(suspendedWorldCamera!=null)
+        {suspendedWorldCamera.cullingMask=worldCullingMask;suspendedWorldCamera.clearFlags=worldClearFlags;suspendedWorldCamera.backgroundColor=worldBackground;}
+        suspendedWorldCamera=null;XunjuuCameraFrame.Invalidate();
+    }
     private void OnFaunaUnlocked()
     {
         if(!initialized)return;
@@ -549,6 +550,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
     // Xunjuú v0.1 - ACCION: navegar sin cargar escenas o aplicaciones externas.
     private void ShowPage(Page page, bool remember = true)
     {
+        if(activityRoot!=null)EndActivity();
         if (contentOrnaments != null) contentOrnaments.SetActive(true);
         CloseFaunaDetails();
         CloseReading();
@@ -560,7 +562,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         homeRoot.SetActive(page == Page.Home);
         cultureRoot.SetActive(page == Page.Culture);
         languageRoot.SetActive(page == Page.Language);
-        galleryRoot.SetActive(page == Page.Home || page == Page.Gallery);
+        galleryRoot.SetActive(page == Page.Gallery);
         SetRect(galleryRoot.GetComponent<RectTransform>(), new Vector2(.04f,.08f),
             page == Page.Home ? new Vector2(.96f,.62f) : new Vector2(.96f,.78f));
         if (page == Page.Home || page == Page.Gallery)
@@ -579,7 +581,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
                 SetPage("Cultura mazahua", "cultura", "VESTIMENTA\nLa indumentaria es una expresion de identidad comunitaria.\n\nGASTRONOMIA\nLa milpa y el maiz forman parte del entorno representado en el juego.\n\nFESTIVIDADES Y TRADICIONES\nSe presentaran celebraciones, memoria oral y practicas comunitarias con fuentes documentales.\n\nEl contenido definitivo debera ser revisado con fuentes academicas y, cuando sea posible, con integrantes o especialistas de la comunidad mazahua.");
                 break;
             case Page.Gallery:
-                SetPage("Galeria multimedia", "galeria", string.Empty);
+                SetPage("Galería multimedia", "galeria", string.Empty);
                 statusText.text = "Toca una ficha para conocerla · Fotografías acreditadas e ilustraciones conceptuales";
                 break;
             case Page.Fauna:
@@ -600,7 +602,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
                 RefreshMiniGame();
                 break;
             case Page.Survey:
-                SetPage("Evaluacion de la experiencia", "evaluacion", string.Empty);
+                SetPage("Evaluación de la experiencia", "evaluacion", string.Empty);
                 RefreshSurvey();
                 break;
         }
@@ -611,6 +613,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
     private System.Collections.IEnumerator AnimateBrowserEntrance()
     {
+        if(XunjuuPresentationPreferences.ReducedMotion){browserFade.alpha=1;browserWindowRect.localScale=Vector3.one;browserEntrance=null;yield break;}
         float elapsed=0f;
         while(elapsed<.18f)
         {
@@ -627,6 +630,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
     private System.Collections.IEnumerator AnimatePageEntrance()
     {
+        if(XunjuuPresentationPreferences.ReducedMotion){contentFade.alpha=1;pageTitle.rectTransform.localScale=Vector3.one;pageEntrance=null;yield break;}
         float elapsed=0f;
         while(elapsed<.20f)
         {
@@ -644,9 +648,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
     private void SetPage(string title, string route, string body)
     {
         pageTitle.text = title;
-        addressText.text = "xunjuu://ludoteca/" + route;
-        if (tabTitle != null)
-            tabTitle.text = "xunjuu://ludoteca/" + route;
+        pageSubtitle.text=PageDescription(currentPage);
         pageBody.text = body;
         statusText.text = "Explora  ·  Aprende  ·  Pon a prueba lo aprendido";
     }
@@ -658,7 +660,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
             if (entry.Value == null)
                 continue;
             bool active = entry.Key == currentPage;
-            entry.Value.color = active ? Parchment : new Color(.20f,.16f,.14f,1f);
+            entry.Value.color = active ? Parchment : ForestDeep;
             if (navigationLabels.TryGetValue(entry.Key, out TMP_Text label))
                 label.color = active ? ForestDeep : Parchment;
             if (navigationNumbers.TryGetValue(entry.Key, out TMP_Text number))
@@ -727,7 +729,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         rect.anchorMin = anchor;
         rect.anchorMax = anchor;
         rect.pivot = new Vector2(0.5f, 0.5f);
-        rect.sizeDelta = new Vector2(355f, 470f);
+        rect.sizeDelta = new Vector2(375f, 500f);
         rect.anchoredPosition = Vector2.zero;
         AddOutline(card, borderColor, 2.5f);
         Shadow shadow = card.AddComponent<Shadow>();
@@ -738,7 +740,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
         TextBlock(card.transform, title, 29, new Vector2(0.5f, 0.90f), new Vector2(320f, 50f), TextAnchor.MiddleCenter, GoldDark).fontStyle = FontStyles.Bold;
         CreateRule(card.transform, 0.81f, ParchmentShade);
-        AddMiniGameCardIcon(card.transform,title);
+        // El título queda libre: la ilustración pertenece al cuerpo de la tarjeta.
         return card;
     }
 
@@ -802,7 +804,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
                 letter.fontStyle = marked ? FontStyles.Bold : FontStyles.Normal;
             }
         }
-        TextBlock(parent, "4 PALABRAS  ·  SIN LÍMITE DE TIEMPO", 16, new Vector2(.5f,.30f), new Vector2(320f,36f), TextAnchor.MiddleCenter, GoldDark);
+        TextBlock(parent, "8 PALABRAS  ·  TABLERO ALEATORIO", 16, new Vector2(.5f,.30f), new Vector2(320f,36f), TextAnchor.MiddleCenter, GoldDark);
         CreateVisualButton(parent, "JUGAR SOPA DE LETRAS", 0.12f, StartWordSearch);
     }
 
@@ -854,7 +856,9 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         GameObject root = new GameObject("Evaluacion", typeof(RectTransform));
         root.transform.SetParent(parent, false);
         SetRect(root.GetComponent<RectTransform>(), new Vector2(0.04f, 0.08f), new Vector2(0.96f, 0.80f));
-        surveyText = TextBlock(root.transform, string.Empty, 34, new Vector2(0.5f, 0.74f), new Vector2(1160f, 240f), TextAnchor.MiddleCenter, ForestDeep);
+        var question=Panel(root.transform,"Panel_Pregunta_Evaluacion",new Color(.995f,.987f,.96f));
+        SetRect(question.GetComponent<RectTransform>(),new Vector2(.025f,.52f),new Vector2(.975f,.97f));AddOutline(question,ParchmentShade,1f);
+        surveyText = TextBlock(root.transform, string.Empty, 32, new Vector2(0.5f, 0.74f), new Vector2(1160f, 220f), TextAnchor.MiddleCenter, ForestDeep);
         Button(root.transform, "Totalmente de acuerdo", new Vector2(0.25f, 0.38f), new Vector2(350f, 70f), () => AnswerSurvey(4), ForestGreenLight);
         Button(root.transform, "De acuerdo", new Vector2(0.75f, 0.38f), new Vector2(320f, 70f), () => AnswerSurvey(3), ForestGreen);
         Button(root.transform, "En desacuerdo", new Vector2(0.25f, 0.18f), new Vector2(350f, 70f), () => AnswerSurvey(2), GoldDark);
@@ -996,7 +1000,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
     // Xunjuú v0.1 - ACCION: mantener estilos y tamaños consistentes.
     private GameObject Panel(Transform parent, string name, Color color)
     {
-        GameObject panel = new GameObject(name, typeof(RectTransform), typeof(Image));
+        GameObject panel = new GameObject(name, typeof(RectTransform), typeof(XunjuuRoundedImage));
         panel.transform.SetParent(parent, false);
         SetRect(panel.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
         panel.GetComponent<Image>().color = color;
@@ -1023,13 +1027,23 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
     private void AddContentOrnaments(Transform parent)
     {
-        CreateRule(parent, 0.84f, ParchmentShade);
+        CreateRule(parent, 0.825f, ParchmentShade);
         CreateRule(parent, 0.045f, ParchmentShade);
-        for (int index = 0; index < 9; index++)
-            CreateDiamond(parent, new Vector2(.38f + index * .03f, .817f), 7f,
-                index % 2 == 0 ? TextileGrana : TextileBlue, Parchment);
-        CreateCardIcon(parent, ElementIcon(2), new Vector2(.045f,.91f), new Vector2(56f,56f));
-        CreateCardIcon(parent, ElementIcon(0), new Vector2(.955f,.91f), new Vector2(56f,56f));
+    }
+
+    private static string PageDescription(Page page)
+    {
+        switch(page)
+        {
+            case Page.Home:return "Elige una sección, observa sus imágenes y practica a tu ritmo.";
+            case Page.Culture:return "Textiles, territorio y memoria comunitaria: un punto de partida para investigar.";
+            case Page.Gallery:return "Imágenes grandes, contexto y créditos. Toca una tarjeta para darle la vuelta.";
+            case Page.Fauna:return "Tus registros del recorrido se reúnen aquí. Abre las fichas descubiertas.";
+            case Page.Plants:return "Seis plantas del huerto: observa su forma y consulta sus fichas y fuentes.";
+            case Page.Language:return "Vocabulario demostrativo, sujeto a revisión de escritura y variante regional.";
+            case Page.MiniGame:return "Tres formas de practicar: observar, relacionar y recordar. Sin límite de tiempo.";
+            default:return "Comparte tu experiencia. Las respuestas se guardan localmente en este equipo.";
+        }
     }
 
     private static void CreateRule(Transform parent, float anchorY, Color color)
@@ -1077,6 +1091,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         item.transform.SetParent(parent, false);
         SetRect(item.GetComponent<RectTransform>(), Vector2.zero, Vector2.one);
         TMP_Text text = item.GetComponent<TMP_Text>();
+        if (XunjuuTypography.DistanceField != null) text.font = XunjuuTypography.DistanceField;
         text.text = value;
         text.fontSize = size;
         text.alignment = ToTmpAlignment(alignment);
@@ -1099,7 +1114,7 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
 
     private Button Button(Transform parent, string label, Vector2 anchor, Vector2 size, UnityEngine.Events.UnityAction action, Color color)
     {
-        GameObject item = new GameObject("Boton_" + label, typeof(RectTransform), typeof(Image), typeof(Button));
+        GameObject item = new GameObject("Boton_" + label, typeof(RectTransform), typeof(XunjuuRoundedImage), typeof(Button));
         item.transform.SetParent(parent, false);
         RectTransform rect = item.GetComponent<RectTransform>();
         rect.anchorMin = anchor;
@@ -1119,6 +1134,8 @@ public sealed partial class XunjuuLudotecaBrowser : MonoBehaviour
         colors.disabledColor = new Color(.68f,.68f,.68f,.8f);
         colors.fadeDuration = .12f;
         button.colors = colors;
+        // Las cartas vacías conservan su animación de volteo y las letras no se desplazan.
+        if(label.Length>1)item.AddComponent<XunjuuButtonMotion>();
         TMP_Text labelText = Text(item.transform, label, size.y >= 68f ? 22 : 19, TextAnchor.MiddleCenter, Parchment);
         labelText.fontStyle = FontStyles.Bold;
         labelText.raycastTarget = false;

@@ -110,9 +110,10 @@ public class MazahuaWordCollectible : MonoBehaviour
 
         Sprite icon = ResolveInventoryIcon();
         string itemId = "palabra_" + NormalizeItemId(mazahuaWord);
-        string displayName = mazahuaWord + " - " + spanishMeaning;
+        string displayName = "Flor de memoria · " + mazahuaWord;
         if (!inventory.AddItem(itemId, displayName, 1, icon))
             return;
+        XunjuuItemCatalog.Remember(itemId,mazahuaWord,spanishMeaning);
 
         collected = true;
 

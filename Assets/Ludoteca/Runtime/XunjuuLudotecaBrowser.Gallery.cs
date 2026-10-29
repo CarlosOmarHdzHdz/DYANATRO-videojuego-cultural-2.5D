@@ -92,7 +92,7 @@ public sealed partial class XunjuuLudotecaBrowser
     private GalleryView CreateGalleryView(Transform parent,int slot)
     {
         int selected=slot;
-        var card=new GameObject("Boton_Ficha_"+slot,typeof(RectTransform),typeof(Image),typeof(Button));
+        var card=new GameObject("Boton_Ficha_"+slot,typeof(RectTransform),typeof(XunjuuRoundedImage),typeof(Button));
         card.transform.SetParent(parent,false);
         var rect=card.GetComponent<RectTransform>();
         rect.anchorMin=rect.anchorMax=new Vector2(.27f+slot*.46f,.46f);
@@ -101,7 +101,7 @@ public sealed partial class XunjuuLudotecaBrowser
         var background=card.GetComponent<Image>();background.color=Parchment;
         AddOutline(card,GoldDark,2f);
         var shadow=card.AddComponent<Shadow>();
-        shadow.effectColor=new Color(.20f,.12f,.07f,.22f);
+        shadow.effectColor=new Color(.20f,.12f,.07f,.12f);
         shadow.effectDistance=new Vector2(0,-6f);
         var button=card.GetComponent<Button>();button.transition=Selectable.Transition.None;
         button.onClick.AddListener(()=>FlipGalleryCard(selected));
@@ -110,7 +110,7 @@ public sealed partial class XunjuuLudotecaBrowser
         view.Front=Panel(card.transform,"Anverso",Parchment);
         view.Front.GetComponent<Image>().raycastTarget=false;
         view.Accent=Panel(view.Front.transform,"Banda_Tipo",Gold).GetComponent<Image>();
-        SetRect(view.Accent.rectTransform,new Vector2(0,.965f),Vector2.one);
+        SetRect(view.Accent.rectTransform,new Vector2(.02f,.99f),new Vector2(.98f,1));
         view.Accent.raycastTarget=false;
         view.Kind=TextBlock(view.Front.transform,"",18,new Vector2(.5f,.93f),new Vector2(500,32),TextAnchor.MiddleCenter,TextileBlue);
         view.Kind.fontStyle=FontStyles.Bold;
@@ -191,6 +191,7 @@ public sealed partial class XunjuuLudotecaBrowser
     {
         GalleryView view=galleryViews[slot];
         if(view.Flip!=null || !view.Button.gameObject.activeInHierarchy)return;
+        if(XunjuuPresentationPreferences.ReducedMotion){view.ShowingBack=!view.ShowingBack;view.Front.SetActive(!view.ShowingBack);view.Back.SetActive(view.ShowingBack);return;}
         view.Flip=StartCoroutine(AnimateGalleryFlip(view,!view.ShowingBack));
     }
 

@@ -112,7 +112,7 @@ public sealed class XunjuuHealthBarVisual
             if (root != null)
                 text.transform.SetParent(root, false);
             Place(text.rectTransform, new Vector2(12f, -cellHeight - 12f), new Vector2(cellWidth, 28f));
-            text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            text.font = XunjuuTypography.Regular;
             text.fontSize = 20;
             text.fontStyle = FontStyle.Bold;
             text.resizeTextForBestFit = false;

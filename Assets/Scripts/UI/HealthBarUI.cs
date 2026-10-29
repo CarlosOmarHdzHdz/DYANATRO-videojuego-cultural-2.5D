@@ -51,7 +51,7 @@ public class BarraVidaFrames : MonoBehaviour
         ActualizarTexto();
     }
 
-    private void LateUpdate() => ActualizarTransicion(Time.deltaTime);
+    private void LateUpdate() => ActualizarTransicion(Time.timeScale > 0 ? Time.deltaTime : 0);
 
     // Solo anima el HUD: no retrasa el daño, la curación ni la derrota reales.
     public void ActualizarTransicion(float deltaTime)

@@ -197,6 +197,24 @@ public static class XunjuuArtMeshes
                 for(int leaf=0;leaf<4;leaf++) b.Ellipsoid(end+b.Vector(-.68f,.68f),new Vector3(1.7f,1.05f,1.55f),new Color(.25f,.39f,.115f)*b.Range(.85f,1.20f),6,3);
             }
         }
+        else if(kind==0)
+        {
+            // Pino estilizado: tronco despejado y copa irregular de aciculas,
+            // sin capas identicas de un abeto ornamental.
+            for(int branch=0;branch<11;branch++)
+            {
+                float angle=branch*2.39996f;
+                float y=4.2f+branch*.38f;
+                float reach=b.Range(1.5f,2.8f)*(1f-branch*.035f);
+                Vector3 end=new Vector3(Mathf.Cos(angle)*reach,y+.25f,Mathf.Sin(angle)*reach);
+                b.Beam(new Vector3(0,y-.8f,0),end,.07f,bark,6);
+                for(int tuft=0;tuft<3;tuft++)
+                    b.Ellipsoid(Vector3.Lerp(new Vector3(0,y+.2f,0),end,.50f+tuft*.23f)+b.Vector(-.17f,.17f),
+                        new Vector3(b.Range(.8f,1.25f),b.Range(.45f,.75f),b.Range(.8f,1.2f)),
+                        new Color(.18f,.34f,.19f)*b.Range(.86f,1.15f),7,4);
+            }
+            b.Ellipsoid(new Vector3(.08f,8.9f,0),new Vector3(.9f,.8f,.95f),new Color(.20f,.37f,.20f),7,4);
+        }
         else
         {
             for(int level=0;level<7;level++)

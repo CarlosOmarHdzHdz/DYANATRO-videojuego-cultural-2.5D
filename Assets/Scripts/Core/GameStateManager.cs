@@ -7,14 +7,16 @@ public sealed class GameStateManager : MonoBehaviour
 {
     private DyanatroGameDirector director;
     private readonly List<CanvasGroup> hud = new List<CanvasGroup>();
+    private readonly HashSet<CanvasGroup> keepDuringInventory = new HashSet<CanvasGroup>();
     public bool HudVisible => director != null && director.IsGameplayHudVisible;
 
-    public static void RegisterHud(GameObject target)
+    public static void RegisterHud(GameObject target, bool hideDuringInventory = true)
     {
         var owner = FindFirstObjectByType<DyanatroGameDirector>();
         if (owner == null || target == null) return;
         var manager = owner.GetComponent<GameStateManager>() ?? owner.gameObject.AddComponent<GameStateManager>();
         manager.director = owner;
+        owner.GetComponent<XunjuuHudLayout>()?.Invalidate();
         Canvas canvas = target.GetComponentInParent<Canvas>();
         if (canvas != null)
         {
@@ -26,6 +28,7 @@ public sealed class GameStateManager : MonoBehaviour
         var group = target.GetComponent<CanvasGroup>();
         if (group == null) group = target.AddComponent<CanvasGroup>();
         if (!manager.hud.Contains(group)) manager.hud.Add(group);
+        if(!hideDuringInventory)manager.keepDuringInventory.Add(group);
         manager.Apply(group);
     }
 
@@ -38,8 +41,10 @@ public sealed class GameStateManager : MonoBehaviour
     private void Apply(CanvasGroup group)
     {
         if (group == null) return;
-        group.alpha = HudVisible ? 1f : 0f;
-        group.interactable = HudVisible;
-        group.blocksRaycasts = HudVisible;
+        bool visible = HudVisible && (keepDuringInventory.Contains(group) || !director.IsInventoryOpen);
+        float alpha = visible ? 1f : 0f;
+        if (group.alpha != alpha) group.alpha = alpha;
+        if (group.interactable != visible) group.interactable = visible;
+        if (group.blocksRaycasts != visible) group.blocksRaycasts = visible;
     }
 }

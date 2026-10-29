@@ -14,7 +14,7 @@ public sealed class XunjuuHerbalSpriteImporter : AssetPostprocessor
         importer.alphaSource = TextureImporterAlphaSource.FromInput;
         importer.alphaIsTransparency = true;
         importer.mipmapEnabled = false;
-        importer.filterMode = FilterMode.Point;
+        importer.filterMode = FilterMode.Bilinear;
         importer.wrapMode = TextureWrapMode.Clamp;
         importer.textureCompression = TextureImporterCompression.Uncompressed;
         importer.npotScale = TextureImporterNPOTScale.None;

@@ -7,6 +7,7 @@
 !/Assets/Editor/Build/
 [Bb]uilds/
 [Ll]ogs/
+[Ll]ogs.meta
 [Uu]ser[Ss]ettings/
 .vs/
 
@@ -38,6 +39,14 @@ output/visual-review/*.mp4
 output/visual-review/*.txt
 
 # Keep project documentation and source assets tracked.
+# La documentacion academica se conserva fuera del proyecto; no se publica.
+*.doc
+*.docx
+*.docm
+*.dotx
+*.pdf
+~$*
+!/Docs/Build/
 
 # Local historical backups and generated diagnostics, never imported by Unity.
 /Archive/
@@ -50,3 +59,6 @@ output/visual-review/*.txt
 # Pruebas locales de herbolaria (proyecto aislado, capturas y registros).
 /output/herbalism-validation/
 /output/herbalism-*.log
+
+# Todos los resultados generados son locales; los informes ya versionados se conservan.
+/output/

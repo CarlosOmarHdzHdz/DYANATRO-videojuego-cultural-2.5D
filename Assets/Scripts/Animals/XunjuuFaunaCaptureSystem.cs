@@ -126,7 +126,7 @@ public sealed class XunjuuFaunaCaptureSystem : MonoBehaviour
         textRect.offsetMin = new Vector2(18f, 6f);
         textRect.offsetMax = new Vector2(-18f, -6f);
         text = textObject.GetComponent<Text>();
-        text.font = Font.CreateDynamicFontFromOSFont(new[] { "Segoe UI", "Arial" }, 20);
+        text.font = XunjuuTypography.Regular;
         text.fontSize = 22;
         text.fontStyle = FontStyle.Bold;
         text.alignment = TextAnchor.MiddleCenter;

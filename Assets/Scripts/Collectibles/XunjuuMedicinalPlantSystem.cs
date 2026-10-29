@@ -13,6 +13,7 @@ public sealed class XunjuuMedicinalPlantSystem : MonoBehaviour
     private Text prompt, notice;
     private float noticeUntil;
     private bool spawned;
+    private XunjuuMedicinalPlant promptedPlant;
     public int PlantCount => plants.Count;
     private void Awake() { instance = this; director = GetComponent<DyanatroGameDirector>(); BuildHud(); }
     private void Update()
@@ -22,10 +23,19 @@ public sealed class XunjuuMedicinalPlantSystem : MonoBehaviour
             && (director == null || director.IsGameplayHudVisible);
         if (playable && !spawned) { spawned = true; SpawnPlants(); }
         XunjuuMedicinalPlant nearest = playable ? FindNearest() : null;
-        prompt.transform.parent.gameObject.SetActive(nearest != null);
-        notice.transform.parent.gameObject.SetActive(playable && Time.unscaledTime < noticeUntil);
+        GameObject promptPanel = prompt.transform.parent.gameObject;
+        GameObject noticePanel = notice.transform.parent.gameObject;
+        bool showPrompt = nearest != null;
+        bool showNotice = playable && Time.unscaledTime < noticeUntil;
+        if (promptPanel.activeSelf != showPrompt) promptPanel.SetActive(showPrompt);
+        if (noticePanel.activeSelf != showNotice) noticePanel.SetActive(showNotice);
+        if (nearest != promptedPlant)
+        {
+            promptedPlant = nearest;
+            if (nearest != null)
+                prompt.text = "G  RECOLECTAR Y REGISTRAR  ·  " + nearest.Entry.DisplayName.ToUpperInvariant();
+        }
         if (nearest == null) return;
-        prompt.text = "G  RECOLECTAR Y REGISTRAR  ·  " + nearest.Entry.DisplayName.ToUpperInvariant();
         if (Input.GetKeyDown(KeyCode.G))
         {
             nearest.TryHarvest(player, out string message);
@@ -115,7 +125,7 @@ public sealed class XunjuuMedicinalPlantSystem : MonoBehaviour
         panel.GetComponent<Image>().color = new Color(.08f, .18f, .13f, .94f); panel.GetComponent<Image>().raycastTarget = false;
         var outline = panel.AddComponent<Outline>(); outline.effectColor = new Color(.74f, .59f, .27f); outline.effectDistance = new Vector2(2, -2);
         var go = new GameObject("Texto", typeof(RectTransform), typeof(Text)); go.transform.SetParent(panel.transform, false);
-        var text = go.GetComponent<Text>(); text.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf"); text.fontSize = 23;
+        var text = go.GetComponent<Text>(); text.font = XunjuuTypography.Regular; text.fontSize = 23;
         text.color = new Color(1, .95f, .81f); text.alignment = TextAnchor.MiddleCenter; text.raycastTarget = false;
         text.rectTransform.anchorMin = Vector2.zero; text.rectTransform.anchorMax = Vector2.one;
         text.rectTransform.offsetMin = new Vector2(14, 4); text.rectTransform.offsetMax = new Vector2(-14, -4);

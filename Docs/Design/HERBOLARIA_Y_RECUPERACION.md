@@ -8,7 +8,14 @@
 4. Abrir **I · Morral**. El panel **Preparación de hierbas** muestra cantidades disponibles. **Preparar infusión** intercambia **2 manzanillas + 1 hierbabuena** por **1 Infusión de hierbas**. Si faltan ingredientes o espacio no se descuenta nada. Su identificador interno sigue siendo `preparado_camino` por compatibilidad.
 5. **H** usa la infusión; también se puede seleccionar en el morral y pulsar **Usar**. Recupera hasta **40 puntos de vida en 5 segundos de tiempo jugable**. La pausa detiene la recuperación, no se sobrepasa el máximo, no se reviven personajes derrotados y no se acumulan recuperaciones simultáneas. Con salud completa no se consume.
 
-Las plantas no son flores-palabra, no cuentan para la misión de fauna y no alteran el desbloqueo del arma. Las fichas se conservan mediante `PlayerPrefs`; las cantidades permanecen en el inventario de la sesión, como los otros recursos existentes. No se añade un guardado completo de partida. La recolección es finita por recorrido: al reiniciar la escena se regeneran los ejemplares.
+Las plantas no son flores-palabra ni cuentan como fauna. La misión del huerto
+empieza tras registrar seis animales; identificar y preparar la infusión
+desbloquea el arma antes del combate. Las fichas se conservan mediante
+`PlayerPrefs`; las cantidades permanecen en el inventario de la sesión.
+No se añade un guardado completo. La recolección es finita por recorrido:
+al reiniciar la escena se regeneran los ejemplares. Véanse la
+[secuencia vigente](MISION_HERBOLARIA_Y_ALDEA_20261019.md) y la
+[revisión regional](REVISION_FLORA_REGIONAL_20261019.md).
 
 La receta vigente utiliza manzanilla y hierbabuena. Las otras cuatro especies amplían el registro y los recursos recolectables; no se inventan nuevas recetas ni efectos curativos para ellas.
 

@@ -11,7 +11,7 @@ public sealed class XunjuuPresentationSpriteImporter : AssetPostprocessor
         importer.spriteImportMode=SpriteImportMode.Single;
         importer.isReadable=true;importer.mipmapEnabled=false;importer.alphaSource=TextureImporterAlphaSource.FromInput;
         importer.alphaIsTransparency=true;importer.textureCompression=TextureImporterCompression.Uncompressed;
-        importer.filterMode=FilterMode.Point;importer.wrapMode=TextureWrapMode.Clamp;
-        importer.npotScale=TextureImporterNPOTScale.None;importer.maxTextureSize=512;
+        importer.filterMode=FilterMode.Bilinear;importer.wrapMode=TextureWrapMode.Clamp;
+        importer.npotScale=TextureImporterNPOTScale.None;importer.maxTextureSize=1024;
     }
 }

@@ -10,6 +10,7 @@ public sealed class XunjuuMedicinalPlant : MonoBehaviour
     public XunjuuMedicinalPlantCatalog.Entry Entry => XunjuuMedicinalPlantCatalog.Find(plantId);
     public bool IsAvailable => !harvested && isActiveAndEnabled && Entry != null;
     public const float HarvestDistance = 3.2f;
+    public static event System.Action<string> Harvested;
 
     public void Configure(string id)
     {
@@ -36,16 +37,16 @@ public sealed class XunjuuMedicinalPlant : MonoBehaviour
         { message = "Morral lleno: libera un espacio antes de recolectar."; return false; }
         harvested = true;
         bool newCard = XunjuuMedicinalPlantCatalog.Register(Entry.Id);
+        Harvested?.Invoke(Entry.Id);
         message = Entry.DisplayName + " +1 · " + (newCard ? "Nueva ficha en la ludoteca" : "Ingrediente guardado en el morral");
         StartCoroutine(HarvestAnimation());
         return true;
     }
     private void LateUpdate()
     {
-        if (visual != null && Camera.main != null)
+        if (visual != null && XunjuuCameraFrame.HasCamera)
         {
-            Vector3 forward = Camera.main.transform.forward; forward.y = 0;
-            if (forward.sqrMagnitude > .001f) transform.rotation = Quaternion.LookRotation(forward);
+            transform.rotation = XunjuuCameraFrame.Upright;
         }
     }
     private IEnumerator HarvestAnimation()

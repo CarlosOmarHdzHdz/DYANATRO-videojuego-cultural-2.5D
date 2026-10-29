@@ -31,6 +31,37 @@ visualmente similares no son necesariamente intercambiables.
 Unity o el IDE. Se excluyen de Git; no borrarlos mientras el editor los utiliza.
 Los respaldos no forman parte de una compilación del juego.
 
+## Limpieza de documentos académicos
+
+Los Word, PDF, fotografías de informes y renders académicos se retiraron del
+proyecto a una carpeta hermana `DYANATRO_Respaldo_Limpieza_*`. Cada traslado
+conserva la ruta relativa y un `manifiesto.json` con tamaños y hashes SHA-256.
+No son contenido del juego ni se deben volver a copiar dentro de `Assets`.
+`Docs/Design`, `Docs/Development` y `Docs/Build` conservan únicamente la
+documentación técnica correspondiente. Los borradores universitarios se
+trabajan fuera de este proyecto Unity.
+
+La herramienta `Tools/Maintenance/Clean-GameWorkspace.ps1` muestra primero un
+plan. Con `-Apply` retira los materiales a un respaldo externo y comprueba
+su integridad. Nunca sigue enlaces, sobrescribe destinos ni modifica las
+cachés activas, los ejecutables o el toolchain aislado de `output/qa`.
+Los formatos de Word/PDF se excluyen de Git para evitar reintroducirlos.
+
+## Audio y trabajo por fotograma
+
+La música de fondo se configura sin reproducción automática. Permanece
+detenida en el menú, el video y el prólogo, y comienza con el recorrido jugable.
+Pausa, ludoteca y cualquier pausa externa mediante `Time.timeScale = 0`
+suspenden la pista sin reiniciarla. Al continuar se conserva su posición.
+El video mantiene su propio audio; no se modificaron los archivos musicales.
+
+`XunjuuCameraFrame` comparte una consulta de cámara por fotograma entre los
+billboards, las plantas y los ordenadores de sprites. La interfaz evita
+reescribir estados idénticos, y el optimizador almacena la clasificación de
+colisiones y suspende sus recorridos mientras el juego está pausado.
+Estas son reducciones de trabajo identificadas en código, no una promesa de
+un porcentaje de mejora de FPS sin una medición de rendimiento independiente.
+
 ## Mantenimiento seguro
 
 - Mover assets con Unity para conservar el archivo `.meta` y su GUID.

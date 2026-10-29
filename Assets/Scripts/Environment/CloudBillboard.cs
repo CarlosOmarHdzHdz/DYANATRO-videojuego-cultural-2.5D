@@ -6,10 +6,10 @@ public class CloudBillboard : MonoBehaviour
     public void SetUpright() => upright=true;
     void LateUpdate()
     {
-        if (Camera.main != null)
+        if (XunjuuCameraFrame.HasCamera)
         {
-            if(upright)transform.rotation=Quaternion.Euler(0,Camera.main.transform.eulerAngles.y,0);
-            else transform.LookAt(transform.position + Camera.main.transform.forward);
+            if(upright)transform.rotation=XunjuuCameraFrame.Upright;
+            else transform.LookAt(transform.position + XunjuuCameraFrame.Forward);
         }
     }
 }

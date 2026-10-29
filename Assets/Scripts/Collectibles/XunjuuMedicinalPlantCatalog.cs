@@ -30,6 +30,8 @@ public static class XunjuuMedicinalPlantCatalog
     private static readonly Dictionary<string, Sprite> sprites = new Dictionary<string, Sprite>();
     public static IReadOnlyList<Entry> Entries => entries;
     public static event Action CollectionChanged;
+    public static event Action<string> CardViewed;
+    public static void RecordCardViewed(string id) { if (IsRegistered(id)) CardViewed?.Invoke(id); }
     public static Entry Find(string id) => Array.Find(entries, e => string.Equals(e.Id, id, StringComparison.OrdinalIgnoreCase));
     public static bool IsRegistered(string id) => Find(id) != null && PlayerPrefs.GetInt(SavePrefix + Find(id).Id, 0) == 1;
     public static int RegisteredCount { get { int count = 0; foreach (var e in entries) if (IsRegistered(e.Id)) count++; return count; } }
@@ -48,6 +50,7 @@ public static class XunjuuMedicinalPlantCatalog
     {
         if (e == null) return string.Empty;
         return "<b>IDENTIFICACIÓN</b>\n<i>" + e.ScientificName + "</i>\n" + e.Description
+            + "\n\n<b>UBICACIÓN EN EL JUEGO</b>\nEjemplar de un huerto cultivado. El estudio de García y Guzmán Mendoza documenta nombres comunes como manzanilla, hierbabuena, árnica, sábila, romero y toronjil en San Sebastián, San José del Rincón. No acredita por sí solo la especie científica exacta de cada nombre ni que todas sean nativas de San Felipe del Progreso."
             + "\n\n<b>MEMORIA BIOCULTURAL</b>\nLa herbolaria está vinculada con saberes familiares y comunitarios. García y Guzmán Mendoza documentaron el conocimiento de plantas medicinales en San Sebastián, San José del Rincón. No se atribuye una receta única a todas las comunidades mazahuas."
             + "\n\n<b>REGISTRO EN EL VIDEOJUEGO</b>\nAcércate y pulsa G para recolectar una unidad y desbloquear esta ficha. El registro permanece en la ludoteca y el recurso se guarda en el morral. Este archivo se dedica a la identificación ilustrativa y al contexto cultural de las plantas."
             + "\n\n<b>CUIDADO DEL ENTORNO</b>\nLa recolección es una mecánica lúdica. Las ilustraciones no permiten identificar plantas reales. No arranques ni consumas plantas sin orientación especializada."

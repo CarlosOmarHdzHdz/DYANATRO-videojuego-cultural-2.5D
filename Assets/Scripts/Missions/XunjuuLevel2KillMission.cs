@@ -18,7 +18,8 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         Animals,
         Enemies,
         Boss,
-        Completed
+        Completed,
+        Herbal // Se agrega al final para conservar los valores serializados previos.
     }
 
     [Header("Xunjuu v0.1 - Objetivos")]
@@ -79,8 +80,8 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     private XunjuuBossNivel1 spawnedBoss;
     private GameObject spawnedReward;
     private GameObject missionHudRoot;
-    private Text phaseBannerText;
-    private Coroutine phaseBannerRoutine;
+    private XunjuuQuestCard questCard;
+    private XunjuuHerbalLearningMission herbalLearning;
 
     // Xunjuú v0.1 - ACCION: permitir que sistemas independientes reaccionen
     // al final del nivel sin cambiar el orden de sus misiones.
@@ -199,7 +200,30 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         defeatedAnimals = Mathf.Min(animalsToDefeat, defeatedAnimals + 1);
         RefreshText();
         if (defeatedAnimals >= animalsToDefeat)
-            BeginEnemyMission();
+            BeginHerbalMission();
+    }
+
+    private void BeginHerbalMission()
+    {
+        if(phase!=MissionPhase.Animals)return;
+        phase=MissionPhase.Herbal;missionActive=false;ApplyPhaseVisibility();RefreshText();
+        var director=FindFirstObjectByType<DyanatroGameDirector>();
+        if(director!=null)
+        {
+            herbalLearning=director.GetComponent<XunjuuHerbalLearningMission>();
+            if(herbalLearning!=null)herbalLearning.Begin();
+        }
+        XunjuuMissionNotice.For(this).Show("fauna-huerto","Jñiñi",
+            "La fauna ya está registrada.\nVisita el huerto de la comunidad y prepara tu morral.");
+        onAnimalMissionCompleted?.Invoke();
+    }
+
+    public bool CompleteHerbalPreparation()
+    {
+        if(phase!=MissionPhase.Herbal)return false;
+        var learning=FindFirstObjectByType<XunjuuHerbalLearningMission>();
+        if(learning==null||!learning.PreparationLearned)return false;
+        BeginEnemyMission();return true;
     }
 
     // ========================================================================
@@ -208,7 +232,7 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
     // ========================================================================
     private void BeginEnemyMission()
     {
-        if (phase != MissionPhase.Animals)
+        if (phase != MissionPhase.Herbal)
             return;
 
         var reward=FindFirstObjectByType<XunjuuSecondaryMissionWeaponReward>(FindObjectsInactive.Include);
@@ -239,9 +263,8 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         RefreshText();
         ShowPhaseBanner(
             "MISION 3 - LAS SOMBRAS\n"
-            + "Dyanatr'o: " + enemiesToDefeat + "\n"
+            + "Sombras del olvido: " + enemiesToDefeat + "\n"
             + "Fauna registrada: recibes el Macuahuitl.\nDerrota a " + enemiesToDefeat + " enemigos.");
-        onAnimalMissionCompleted?.Invoke();
     }
 
     // ACCION: contar un enemigo comun una sola vez durante su fase.
@@ -322,7 +345,7 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         if (phase == MissionPhase.Animals)
         {
             defeatedAnimals = animalsToDefeat;
-            BeginEnemyMission();
+            BeginHerbalMission();
         }
         else if (phase == MissionPhase.Enemies)
         {
@@ -373,7 +396,7 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         XunjuuWorldLabel label = bossObject.GetComponent<XunjuuWorldLabel>();
         if (label == null)
             label = bossObject.AddComponent<XunjuuWorldLabel>();
-        label.Configure("Mazahua: Gran Dyanatr'o / Ocelotl\nEspañol: Gran Dyanatr'o / Ocelotl", true, new Vector3(0f, 2.75f, 0f));
+        label.Configure("OCELOTL\nGuardián de las sombras · ficción", true, new Vector3(0f, 2.75f, 0f));
 
         spawnedBoss.Defeated += HandleBossDefeated;
         onBossSpawned?.Invoke();
@@ -461,7 +484,7 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
         if (phase == MissionPhase.Animals)
             return "Fauna por capturar";
         if (phase == MissionPhase.Enemies)
-            return "Dyanatr'o";
+            return "Sombra del olvido";
         if (phase == MissionPhase.Boss)
             return "Ocelotl";
         return string.Empty;
@@ -728,127 +751,60 @@ public sealed class XunjuuLevel2KillMission : MonoBehaviour
             missionHudRoot.SetActive(active);
     }
 
-    private void RefreshText()
+    private void LateUpdate()
     {
-        if (missionText == null)
-            return;
-        switch (phase)
-        {
-            case MissionPhase.Animals:
-                missionText.text =
-                    $"REGISTRO DE FAUNA: {RemainingAnimals} pendientes.\n"
-                    + "Acércate y pulsa C para capturar.";
-                break;
-            case MissionPhase.Enemies:
-                missionText.text =
-                    $"Mazahua: Dyanatr'o: {RemainingEnemies}.\n"
-                    + $"Español: Dyanatr'o: {RemainingEnemies}.";
-                break;
-            case MissionPhase.Boss:
-                missionText.text =
-                    "Mazahua: Gran Dyanatr'o / Ocelotl.\n"
-                    + "Español: Gran Dyanatr'o / Ocelotl.";
-                break;
-            case MissionPhase.Completed:
-                missionText.text =
-                    "Mazahua: Jñiñi tsasú.\n"
-                    + "Español: Pueblo protegido.";
-                break;
-            default:
-                missionText.text =
-                    "Mazahua: Tsansa tsicha ndájná.\n"
-                    + "Español: Recoge cinco flores.";
-                break;
-        }
+        if(phase==MissionPhase.Herbal&&questCard!=null&&herbalLearning!=null)
+            questCard.SetProgress(Mathf.Clamp((int)herbalLearning.Stage-1,0,3),3);
     }
 
-    // ACCION: crear un HUD compacto y un aviso grande para cada cambio de fase.
+    private void RefreshText()
+    {
+        if(missionText==null)return;
+        string chapter,instruction;int count=0,goal=0;
+        switch(phase)
+        {
+            case MissionPhase.Animals:
+                chapter="02 / REGISTRO DE FAUNA";count=defeatedAnimals;goal=animalsToDefeat;
+                instruction=$"{RemainingAnimals} animales por registrar.\nAcércate con cuidado y pulsa C.";break;
+            case MissionPhase.Herbal:
+                chapter="03 / SABERES DEL HUERTO";goal=3;
+                instruction="Reconoce las plantas y consulta sus fichas.\nDespués prepara una infusión en el morral [I].";break;
+            case MissionPhase.Enemies:
+                chapter="04 / LAS SOMBRAS DEL OLVIDO";count=defeatedEnemies;goal=enemiesToDefeat;
+                instruction=$"{RemainingEnemies} sombras por enfrentar. F: atacar.\nH: usar una infusión cuando falte salud.";break;
+            case MissionPhase.Boss:
+                chapter="05 / ENCUENTRO CON OCELOTL";
+                instruction="F: atacar · E: giro protector.\nConserva tus infusiones para cuando las necesites.";break;
+            case MissionPhase.Completed:
+                chapter="RECORRIDO COMPLETADO";count=goal=1;
+                instruction="El camino está libre.\nVuelve a la ludoteca y comparte lo aprendido.";break;
+            default:
+                chapter="01 / MEMORIA DEL TERRITORIO";
+                instruction="Recupera las cinco flores de memoria.";break;
+        }
+        if(questCard!=null)questCard.Set(chapter,instruction,count,goal);else missionText.text=instruction;
+    }
+
     private void BuildMissionHud()
     {
-        GameObject canvasObject = new GameObject("HUD_Progresion_Nivel1", typeof(Canvas), typeof(CanvasScaler), typeof(GraphicRaycaster));
-        canvasObject.transform.SetParent(transform, false);
-        missionHudRoot = canvasObject;
-        GameStateManager.RegisterHud(canvasObject);
-        Canvas canvas = canvasObject.GetComponent<Canvas>();
-        canvas.renderMode = RenderMode.ScreenSpaceOverlay;
-        canvas.sortingOrder = 2400;
-
-        CanvasScaler scaler = canvasObject.GetComponent<CanvasScaler>();
-        scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
-        scaler.referenceResolution = new Vector2(1920f, 1080f);
-
-        GameObject panel = new GameObject("Panel_Objetivo", typeof(RectTransform), typeof(Image));
-        panel.transform.SetParent(canvasObject.transform, false);
-        RectTransform panelRect = panel.GetComponent<RectTransform>();
-        panelRect.anchorMin = new Vector2(0.5f, 1f);
-        panelRect.anchorMax = new Vector2(0.5f, 1f);
-        panelRect.pivot = new Vector2(0.5f, 1f);
-        panelRect.anchoredPosition = new Vector2(0f, -18f);
-        panelRect.sizeDelta = new Vector2(620f, 76f);
-        panel.GetComponent<Image>().color = new Color(0.025f, 0.065f, 0.07f, 0.9f);
-        panel.GetComponent<Image>().raycastTarget = false;
-        Outline border = panel.AddComponent<Outline>();
-        border.effectColor = new Color(.32f, .46f, .43f, .8f);
-        border.effectDistance = new Vector2(1f, -1f);
-
-        GameObject accent = new GameObject("Franja_Objetivo", typeof(RectTransform), typeof(Image));
-        accent.transform.SetParent(panel.transform, false);
-        RectTransform accentRect = accent.GetComponent<RectTransform>();
-        accentRect.anchorMin = new Vector2(0f, 0f);
-        accentRect.anchorMax = new Vector2(0f, 1f);
-        accentRect.pivot = new Vector2(0f, 0.5f);
-        accentRect.sizeDelta = new Vector2(6f, 0f);
-        accent.GetComponent<Image>().color = new Color(1f, 0.68f, 0.18f, 1f);
-        accent.GetComponent<Image>().raycastTarget = false;
-
-        GameObject textObject = new GameObject("Texto_Objetivo", typeof(RectTransform), typeof(Text));
-        textObject.transform.SetParent(panel.transform, false);
-        RectTransform textRect = textObject.GetComponent<RectTransform>();
-        textRect.anchorMin = Vector2.zero;
-        textRect.anchorMax = Vector2.one;
-        textRect.offsetMin = new Vector2(22f, 7f);
-        textRect.offsetMax = new Vector2(-18f, -7f);
-        missionText = textObject.GetComponent<Text>();
-        missionText.font = Font.CreateDynamicFontFromOSFont(new[] { "Arial", "Segoe UI" }, 18);
-        missionText.fontSize = 20;
-        missionText.alignment = TextAnchor.MiddleCenter;
-        missionText.color = new Color(.96f, .97f, .92f, 1f);
-        missionText.raycastTarget = false;
-
-        GameObject bannerObject = new GameObject("Aviso_Cambio_Mision", typeof(RectTransform), typeof(Text), typeof(Outline));
-        bannerObject.transform.SetParent(canvasObject.transform, false);
-        RectTransform bannerRect = bannerObject.GetComponent<RectTransform>();
-        bannerRect.anchorMin = new Vector2(0.5f, 0.5f);
-        bannerRect.anchorMax = new Vector2(0.5f, 0.5f);
-        bannerRect.sizeDelta = new Vector2(760f, 104f);
-        bannerRect.anchoredPosition = new Vector2(0f, 154f);
-        phaseBannerText = bannerObject.GetComponent<Text>();
-        phaseBannerText.font = missionText.font;
-        phaseBannerText.fontSize = 24;
-        phaseBannerText.fontStyle = FontStyle.Bold;
-        phaseBannerText.alignment = TextAnchor.MiddleCenter;
-        phaseBannerText.color = new Color(1f, 0.72f, 0.16f, 1f);
-        phaseBannerText.raycastTarget = false;
-        bannerObject.GetComponent<Outline>().effectColor = new Color(0.03f, 0.04f, 0.04f, 1f);
-        phaseBannerText.enabled = false;
+        var root=new GameObject("HUD_Progresion_Nivel1",typeof(Canvas),typeof(CanvasScaler));
+        root.transform.SetParent(transform,false);missionHudRoot=root;
+        var canvas=root.GetComponent<Canvas>();canvas.renderMode=RenderMode.ScreenSpaceOverlay;canvas.sortingOrder=2400;
+        GameStateManager.RegisterHud(root);
+        questCard=XunjuuQuestCard.Create(root.transform,"Panel_Objetivo");missionText=questCard.Body;
     }
 
     private void ShowPhaseBanner(string message)
     {
-        if (phaseBannerText == null)
-            return;
-        if (phaseBannerRoutine != null)
-            StopCoroutine(phaseBannerRoutine);
-        phaseBannerRoutine = StartCoroutine(ShowPhaseBannerRoutine(message));
-    }
-
-    private IEnumerator ShowPhaseBannerRoutine(string message)
-    {
-        phaseBannerText.text = message;
-        phaseBannerText.enabled = true;
-        yield return new WaitForSecondsRealtime(phaseBannerDuration);
-        phaseBannerText.enabled = false;
-        phaseBannerRoutine = null;
+        // El inicio no vuelve a anunciar la misma transicion de las flores.
+        if(phase==MissionPhase.Animals)return;
+        var notice=XunjuuMissionNotice.For(this);
+        if(phase==MissionPhase.Enemies)
+            notice.Show("preparacion-completa","B’epji","El morral está preparado.\nRecibes el Macuahuitl; usa H si necesitas recuperar salud.");
+        else if(phase==MissionPhase.Boss)
+            notice.Show("sombras-completas","B’epji","Desafío completado: cinco sombras vencidas.\nUsa E para el giro protector y enfrenta a Ocelotl.");
+        else if(phase==MissionPhase.Completed)
+            notice.Show("recorrido-completo","Jñiñi","Pueblo protegido.\nEl recorrido termina; comparte lo aprendido en la ludoteca.",true,6f);
     }
 
     private void OnValidate()

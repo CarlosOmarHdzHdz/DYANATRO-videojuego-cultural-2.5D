@@ -76,6 +76,8 @@ public sealed partial class XunjuuLudotecaBrowser
         if(miniGameHub!=null)miniGameHub.SetActive(true);
         if(contentOrnaments!=null)contentOrnaments.SetActive(true);
         if(pageTitle!=null)pageTitle.gameObject.SetActive(true);
+        if(pageSubtitle!=null)pageSubtitle.gameObject.SetActive(true);
+        if(pageOverline!=null)pageOverline.gameObject.SetActive(true);
         if(statusText!=null)statusText.text="Elige una actividad para practicar. Puedes volver a intentarlo cuantas veces quieras.";
     }
 
@@ -85,15 +87,16 @@ public sealed partial class XunjuuLudotecaBrowser
         miniGameHub.SetActive(false);
         contentOrnaments.SetActive(false);
         pageTitle.gameObject.SetActive(false);
+        pageSubtitle.gameObject.SetActive(false);pageOverline.gameObject.SetActive(false);
         statusText.text="Actividad: "+title+" · Mundo pausado";
         activityRoot=Panel(miniGameRoot.transform,"Actividad_"+title,new Color(.985f,.970f,.936f,1f));
-        SetRect(activityRoot.GetComponent<RectTransform>(),new Vector2(.035f,.06f),new Vector2(.965f,.965f));
+        SetRect(activityRoot.GetComponent<RectTransform>(),new Vector2(.035f,.025f),new Vector2(.965f,.975f));
         AddOutline(activityRoot,ParchmentShade,1.5f);
         StartCoroutine(AnimateActivityEntrance(activityRoot.AddComponent<CanvasGroup>()));
         GameObject header=Panel(activityRoot.transform,"Encabezado_Academico",ForestDeep);
         SetRect(header.GetComponent<RectTransform>(),new Vector2(.035f,.855f),new Vector2(.965f,.965f));
         AddOutline(header,GoldDark,1.5f);
-        TMP_Text overline=Text(header.transform,"DYANATR’O  /  LUDOTECA",16,TextAnchor.MiddleLeft,Gold);
+        TMP_Text overline=Text(header.transform,"APRENDER JUGANDO",15,TextAnchor.MiddleLeft,Gold);
         SetRect(overline.rectTransform,new Vector2(.025f,.08f),new Vector2(.34f,.92f));
         overline.fontStyle=FontStyles.Bold;
         TextBlock(header.transform,title,30,new Vector2(.53f,.5f),new Vector2(440,58),TextAnchor.MiddleCenter,Parchment).fontStyle=FontStyles.Bold;
@@ -127,6 +130,7 @@ public sealed partial class XunjuuLudotecaBrowser
 
     private System.Collections.IEnumerator AnimateActivityEntrance(CanvasGroup group)
     {
+        if(XunjuuPresentationPreferences.ReducedMotion){group.alpha=1;yield break;}
         float elapsed=0f;
         while(elapsed<.22f && group!=null)
         {
@@ -139,6 +143,7 @@ public sealed partial class XunjuuLudotecaBrowser
 
     private System.Collections.IEnumerator AnimateCompletion(CanvasGroup group,RectTransform sun)
     {
+        if(XunjuuPresentationPreferences.ReducedMotion){group.alpha=1;if(sun!=null)sun.localScale=Vector3.one;yield break;}
         float elapsed=0f;
         while(elapsed<.32f && group!=null)
         {
@@ -201,7 +206,7 @@ public sealed partial class XunjuuLudotecaBrowser
         for(int i=0;i<cardCount;i++)
         {
             int index=i;
-            tiles[i]=Button(memoryBoard.transform,"",new Vector2(.305f+(i%4)*.13f,.595f-(i/4)*.225f),new Vector2(136,136),()=>PickMemory(index),Parchment);
+            tiles[i]=Button(memoryBoard.transform,"",new Vector2(.29f+(i%4)*.14f,.59f-(i/4)*.21f),new Vector2(158,158),()=>PickMemory(index),Parchment);
             BuildMemoryCard(tiles[i],memoryDeck[i]);
         }
         activityStatus.text="Etapa "+(memoryStage+1)+" / "+MemoryStageCount+" · Parejas: "+pairs+" / "+MemoryMotifCount+" · Selecciona dos tarjetas.";
@@ -335,22 +340,22 @@ public sealed partial class XunjuuLudotecaBrowser
         GenerateSearchGrid();
         tiles=new Button[SearchSize*SearchSize];searchStitches=new GameObject[tiles.Length];
         GameObject grid=Panel(activityRoot.transform,"Cuadricula_Academica",new Color(.956f,.938f,.895f,1f));
-        SetRect(grid.GetComponent<RectTransform>(),new Vector2(.055f,.135f),new Vector2(.655f,.76f));
+        var gridRect=grid.GetComponent<RectTransform>();gridRect.anchorMin=gridRect.anchorMax=new Vector2(.32f,.38f);gridRect.sizeDelta=new Vector2(620,620);gridRect.anchoredPosition=Vector2.zero;
         AddOutline(grid,TextileBlue,2f);
         TextBlock(grid.transform,"TABLERO  ·  10 FILAS × 10 COLUMNAS",18,new Vector2(.5f,.95f),new Vector2(620,30),TextAnchor.MiddleCenter,GoldDark).fontStyle=FontStyles.Bold;
         for(int i=0;i<tiles.Length;i++)
         {
             int index=i;
             int column=i%SearchSize,row=i/SearchSize;
-            tiles[i]=Button(grid.transform,searchLetters[i].ToString(),new Vector2(.13f+column*.082f,.82f-row*.073f),new Vector2(53,34),()=>PickLetter(index),Parchment);
+            tiles[i]=Button(grid.transform,searchLetters[i].ToString(),new Vector2(.14f+column*.078f,.815f-row*.078f),new Vector2(44,44),()=>PickLetter(index),Parchment);
             TMP_Text letter=tiles[i].GetComponentInChildren<TMP_Text>();letter.fontSize=21;letter.fontStyle=FontStyles.Bold;letter.color=ForestDeep;
             AddOutline(tiles[i].gameObject,new Color(.55f,.50f,.43f,.65f),1f);
         }
-        for(int column=0;column<SearchSize;column++)TextBlock(grid.transform,(column+1).ToString(),15,new Vector2(.13f+column*.082f,.90f),new Vector2(40,24),TextAnchor.MiddleCenter,TextileBlue).fontStyle=FontStyles.Bold;
-        for(int row=0;row<SearchSize;row++)TextBlock(grid.transform,((char)('A'+row)).ToString(),15,new Vector2(.055f,.82f-row*.073f),new Vector2(28,24),TextAnchor.MiddleCenter,TextileBlue).fontStyle=FontStyles.Bold;
+        for(int column=0;column<SearchSize;column++)TextBlock(grid.transform,(column+1).ToString(),15,new Vector2(.14f+column*.078f,.90f),new Vector2(40,24),TextAnchor.MiddleCenter,TextileBlue).fontStyle=FontStyles.Bold;
+        for(int row=0;row<SearchSize;row++)TextBlock(grid.transform,((char)('A'+row)).ToString(),15,new Vector2(.055f,.815f-row*.078f),new Vector2(28,24),TextAnchor.MiddleCenter,TextileBlue).fontStyle=FontStyles.Bold;
 
         GameObject guide=Panel(activityRoot.transform,"Guia_Didactica",new Color(.985f,.97f,.91f,1f));
-        SetRect(guide.GetComponent<RectTransform>(),new Vector2(.68f,.135f),new Vector2(.945f,.76f));
+        var guideRect=guide.GetComponent<RectTransform>();guideRect.anchorMin=guideRect.anchorMax=new Vector2(.81f,.38f);guideRect.sizeDelta=new Vector2(360,620);guideRect.anchoredPosition=Vector2.zero;
         AddOutline(guide,GoldDark,1.5f);
         TextBlock(guide.transform,"GUÍA DE BÚSQUEDA",20,new Vector2(.5f,.91f),new Vector2(290,42),TextAnchor.MiddleCenter,GoldDark).fontStyle=FontStyles.Bold;
         TextBlock(guide.transform,"Reconoce vocabulario del territorio y la cultura.",16,new Vector2(.5f,.78f),new Vector2(290,54),TextAnchor.MiddleCenter,ForestDeep);
@@ -419,6 +424,7 @@ public sealed partial class XunjuuLudotecaBrowser
 
     private System.Collections.IEnumerator AnimateStitch(RectTransform rect)
     {
+        if(XunjuuPresentationPreferences.ReducedMotion){if(rect!=null)rect.localScale=Vector3.one;yield break;}
         float elapsed=0f;
         while(elapsed<.20f && rect!=null)
         {
@@ -516,6 +522,7 @@ public sealed partial class XunjuuLudotecaBrowser
 
     private System.Collections.IEnumerator AnimateQuizPrompt(RectTransform prompt)
     {
+        if(XunjuuPresentationPreferences.ReducedMotion){if(prompt!=null)prompt.localScale=Vector3.one;quizPromptAnimation=null;yield break;}
         float elapsed=0f;
         while(elapsed<.22f && prompt!=null)
         {
@@ -547,6 +554,7 @@ public sealed partial class XunjuuLudotecaBrowser
     private System.Collections.IEnumerator AnimateWrongAnswer(RectTransform answer)
     {
         if(answer==null)yield break;
+        if(XunjuuPresentationPreferences.ReducedMotion)yield break;
         Vector2 origin=answer.anchoredPosition;
         float elapsed=0f;
         while(elapsed<.24f && answer!=null)
@@ -593,6 +601,7 @@ public sealed partial class XunjuuLudotecaBrowser
     private void SetMemoryFace(int index,bool visible)
     {
         if(memoryFlips[index]!=null)StopCoroutine(memoryFlips[index]);
+        if(XunjuuPresentationPreferences.ReducedMotion){ApplyMemoryFace(index,visible);tiles[index].transform.localScale=Vector3.one;memoryFlips[index]=null;return;}
         memoryFlips[index]=StartCoroutine(AnimateMemoryFlip(index,visible));
     }
 

@@ -46,12 +46,12 @@ public sealed class XunjuuWorldLabel : MonoBehaviour
         if (label == null)
             return;
 
-        Camera camera = Camera.main;
+        if(!showLabel){if(labelRenderer!=null&&labelRenderer.enabled)labelRenderer.enabled=false;return;}
+        Camera camera = Application.isPlaying?XunjuuCameraFrame.Current:Camera.main;
         bool visible = showLabel;
         if (camera != null)
         {
-            visible &= Vector3.Distance(camera.transform.position, transform.position) <= maxVisibleDistance;
-            label.transform.rotation = camera.transform.rotation;
+            visible &= (camera.transform.position-transform.position).sqrMagnitude <= maxVisibleDistance*maxVisibleDistance;
         }
         if(Application.isPlaying)
         {
@@ -59,15 +59,13 @@ public sealed class XunjuuWorldLabel : MonoBehaviour
             if(viewer!=null)
             {
                 Vector3 delta=transform.position-viewer.position;delta.y=0;
-                float distance=delta.magnitude;
-                visible &= distance<12f;
-                Color tint=textColor;tint.a*=1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(8f,12f,distance));
-                label.color=tint;
+                visible &= delta.sqrMagnitude<144f;
+                if(visible){float distance=delta.magnitude;Color tint=textColor;tint.a*=1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(8f,12f,distance));if(label.color!=tint)label.color=tint;}
             }
         }
 
-        if (labelRenderer != null)
-            labelRenderer.enabled = visible;
+        if(visible&&camera!=null)label.transform.rotation=camera.transform.rotation;
+        if (labelRenderer != null&&labelRenderer.enabled!=visible)labelRenderer.enabled = visible;
     }
 
     // ACCIÓN: cambiar el nombre y decidir si debe mostrarse.
@@ -107,10 +105,12 @@ public sealed class XunjuuWorldLabel : MonoBehaviour
         label.alignment = TextAlignment.Center;
         label.fontSize = fontSize;
         label.characterSize = characterSize;
+        label.font = XunjuuTypography.Regular;
         label.color = textColor;
         labelRenderer = label.GetComponent<Renderer>();
         if (labelRenderer != null)
         {
+            labelRenderer.sharedMaterial = label.font.material;
             labelRenderer.sortingOrder = 3000;
             labelRenderer.enabled = showLabel;
         }

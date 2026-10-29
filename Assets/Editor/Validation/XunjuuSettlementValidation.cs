@@ -20,6 +20,8 @@ public static class XunjuuSettlementValidation
         Directory.CreateDirectory(Output);
         AssetDatabase.ImportAsset("Assets/Resources/Sprites/Items/InfusionHierbas_v2.png",ImportAssetOptions.ForceUpdate);
         AssetDatabase.ImportAsset("Assets/Resources/Sprites/Collectibles/FlorMemoria_v2.png",ImportAssetOptions.ForceUpdate);
+        foreach(string guid in AssetDatabase.FindAssets("t:Texture2D",new[]{"Assets/Resources/Sprites/Plants/HerbalRealistic"}))
+            AssetDatabase.ImportAsset(AssetDatabase.GUIDToAssetPath(guid),ImportAssetOptions.ForceUpdate);
         EditorSceneManager.OpenScene("Assets/Scenes/SampleScene.unity");
         SessionState.SetBool(Flag,true);EditorApplication.EnterPlaymode();
     }
@@ -49,16 +51,28 @@ public static class XunjuuSettlementValidation
         SessionState.SetBool(Flag,false);
         try
         {
-            float until=Time.realtimeSinceStartup+35;
+            float until=Time.realtimeSinceStartup+70;
             XunjuuMeadowDressing meadow=null;
             while(Time.realtimeSinceStartup<until)
             {
                 meadow=UnityEngine.Object.FindFirstObjectByType<XunjuuMeadowDressing>();
-                if(meadow!=null && meadow.VillageReady && XunjuuSettlementPlan.Fields.Count>0)break;
+                var environment=UnityEngine.Object.FindFirstObjectByType<XunjuuEnvironment3D>();
+                if(meadow!=null && meadow.VillageReady && XunjuuSettlementPlan.Fields.Count>0 && environment!=null && environment.TreeClearanceReady)break;
                 await Task.Delay(150);
             }
             Check(meadow!=null && meadow.VillageReady,"Village not ready");
-            Check(XunjuuSettlementPlan.Houses.Count>=8,"Too few houses: "+XunjuuSettlementPlan.Houses.Count);
+            var environmentReady=UnityEngine.Object.FindFirstObjectByType<XunjuuEnvironment3D>();
+            Check(environmentReady!=null&&environmentReady.TreeClearanceReady,"Tree clearance incomplete: "+environmentReady?.UnresolvedTreeCount);
+            var trees=UnityEngine.Object.FindObjectsByType<XunjuuRegionalTree>(FindObjectsSortMode.None);
+            Check(trees.Length>30,"Regional forest missing");
+            foreach(var tree in trees)
+            {
+                Check(tree.Form==0||tree.Form==2,"Non-regional tree form");
+                Check(!XunjuuSettlementPlan.Reserved(tree.Bounds.center,tree.CrownRadius+.6f),"Tree crown enters reserved path, field or building: "+tree.name);
+                foreach(var legacy in tree.GetComponentsInChildren<SpriteRenderer>())
+                    Check(legacy.forceRenderingOff,"Legacy tree sprite reappeared");
+            }
+            Check(XunjuuSettlementPlan.Houses.Count>=16,"Too few houses: "+XunjuuSettlementPlan.Houses.Count);
             int target=(int)typeof(DyanatroGameDirector).GetField("cornFieldCount",BindingFlags.Instance|BindingFlags.NonPublic)
                 .GetValue(UnityEngine.Object.FindFirstObjectByType<DyanatroGameDirector>());
             Check(XunjuuSettlementPlan.Fields.Count==target,"Fields: "+XunjuuSettlementPlan.Fields.Count+" / "+target);
@@ -70,8 +84,17 @@ public static class XunjuuSettlementValidation
                     for(float z=field.min.z;z<=field.max.z;z+=1)Check(!XunjuuSettlementPlan.OnPath(new Vector3(x,0,z)),"Field hits path");
             }
             foreach(var access in XunjuuSettlementPlan.Accesses)
+            {
                 Check(Mathf.Abs(access.junction.x-XunjuuSettlementPlan.MainPathAt(access.junction.z).x)<.01f,"Access disconnected");
+                Check(access.points!=null&&access.points.Length>3,"Access lacks curved centreline");
+                if(Vector3.Distance(access.door,access.junction)>15f)
+                    Check(access.points.Any(p=>XunjuuSettlementPlan.SegmentDistance(p,access.door,access.junction)>.2f),"Access still straight");
+                foreach(var point in access.points)
+                    Check(XunjuuSettlementPlan.OnPath(point),"Curve mesh and reservation disagree");
+            }
             Check(XunjuuSettlementPlan.Accesses.Count>=XunjuuSettlementPlan.Houses.Count,"Missing house accesses");
+            var road=GameObject.Find("Camino_Principal_Aldea");
+            Check(road!=null&&road.GetComponent<MeshFilter>().sharedMesh.normals.Average(n=>n.y)>.5f,"Road mesh faces downward");
             var crops=UnityEngine.Object.FindObjectsByType<XunjuuCrop>(FindObjectsSortMode.None);
             Check(crops.Length>100,"Missing crops");
             foreach(var crop in crops)
@@ -131,13 +154,18 @@ public static class XunjuuSettlementValidation
         finally{SessionState.SetBool(Flag+".done",true);EditorApplication.ExitPlaymode();}
     }
     private static void Check(bool condition,string message){if(!condition)throw new InvalidOperationException(message);}
-    private static async Task CaptureCanvas(Canvas canvas,string path)
+    public static async Task CaptureCanvas(Canvas canvas,string path,int width=1600,int height=900,float designScale=-1)
     {
         var host=new GameObject("UI_Camera_QA",typeof(Camera));var camera=host.GetComponent<Camera>();
         camera.orthographic=true;camera.orthographicSize=5;camera.clearFlags=CameraClearFlags.SolidColor;
         camera.backgroundColor=new Color(.06f,.09f,.08f);camera.cullingMask=1<<30;
         camera.transform.position=new Vector3(0,0,-10);camera.nearClipPlane=.1f;camera.farClipPlane=5;
-        var rt=new RenderTexture(1600,900,24);camera.targetTexture=rt;
+        var rt=new RenderTexture(width,height,24);camera.targetTexture=rt;
+        var scaler=canvas.GetComponent<UnityEngine.UI.CanvasScaler>();
+        var scaleMode=scaler!=null?scaler.uiScaleMode:UnityEngine.UI.CanvasScaler.ScaleMode.ConstantPixelSize;
+        float oldFactor=scaler!=null?scaler.scaleFactor:1;
+        var layout=UnityEngine.Object.FindFirstObjectByType<XunjuuHudLayout>();bool layoutEnabled=layout!=null&&layout.enabled;if(layout!=null)layout.enabled=false;
+        if(scaler!=null){scaler.uiScaleMode=UnityEngine.UI.CanvasScaler.ScaleMode.ConstantPixelSize;scaler.scaleFactor=designScale>0?designScale:Mathf.Min(width/1920f,height/1080f);}
         var mode=canvas.renderMode;var oldCamera=canvas.worldCamera;float oldDistance=canvas.planeDistance;
         Transform oldParent=canvas.transform.parent;
         Vector3 oldPosition=canvas.transform.localPosition,oldScale=canvas.transform.localScale;Quaternion oldRotation=canvas.transform.localRotation;
@@ -147,11 +175,13 @@ public static class XunjuuSettlementValidation
         canvas.renderMode=RenderMode.ScreenSpaceCamera;canvas.worldCamera=camera;canvas.planeDistance=1;
         await Task.Delay(150);Canvas.ForceUpdateCanvases();camera.Render();
         var previous=RenderTexture.active;RenderTexture.active=rt;
-        var image=new Texture2D(1600,900,TextureFormat.RGB24,false);image.ReadPixels(new Rect(0,0,1600,900),0,0);image.Apply();
+        var image=new Texture2D(width,height,TextureFormat.RGB24,false);image.ReadPixels(new Rect(0,0,width,height),0,0);image.Apply();
         File.WriteAllBytes(path,image.EncodeToPNG());RenderTexture.active=previous;
         canvas.renderMode=mode;canvas.worldCamera=oldCamera;canvas.planeDistance=oldDistance;
+        if(scaler!=null){scaler.uiScaleMode=scaleMode;scaler.scaleFactor=oldFactor;}
+        if(layout!=null)layout.enabled=layoutEnabled;
         canvas.transform.SetParent(oldParent,false);canvas.transform.localPosition=oldPosition;canvas.transform.localScale=oldScale;canvas.transform.localRotation=oldRotation;
-        for(int i=0;i<elements.Length;i++)elements[i].gameObject.layer=layers[i];
+        for(int i=0;i<elements.Length;i++)if(elements[i]!=null)elements[i].gameObject.layer=layers[i];
         camera.targetTexture=null;rt.Release();
         UnityEngine.Object.Destroy(rt);UnityEngine.Object.Destroy(image);UnityEngine.Object.Destroy(host);
     }

@@ -30,6 +30,7 @@ public static class XunjuuCaptureFlowValidation
     private static async void Run()
     {
         var saved=XunjuuFaunaCatalog.Entries.ToDictionary(e=>e.Id,e=>PlayerPrefs.HasKey("xunjuu.fauna.capturada."+e.Id)?PlayerPrefs.GetInt("xunjuu.fauna.capturada."+e.Id):-1);
+        var plantSaved=XunjuuMedicinalPlantCatalog.Entries.ToDictionary(e=>e.Id,e=>PlayerPrefs.HasKey(XunjuuMedicinalPlantCatalog.SavePrefix+e.Id)?PlayerPrefs.GetInt(XunjuuMedicinalPlantCatalog.SavePrefix+e.Id):-1);
         bool passed=false;
         try
         {
@@ -76,7 +77,9 @@ public static class XunjuuCaptureFlowValidation
                 if(!browser.ShowFaunaDetails(animal.Entry))throw new Exception("Ficha no desbloqueada por captura.");
             }
             await Task.Delay(700);
-            if(!mission.IsEnemyPhase || !player.HasOrbitalWeapon() || player.HasOrbitalAttackUnlocked())throw new Exception("Recompensa incorrecta tras seis capturas.");
+            if(mission.CurrentPhase!=XunjuuLevel2KillMission.MissionPhase.Herbal||player.HasOrbitalWeapon())throw new Exception("Las capturas deben abrir el huerto sin arma.");
+            XunjuuHerbalLearningValidation.PrepareForCombat(player,director);
+            if(!mission.IsEnemyPhase || !player.HasOrbitalWeapon() || player.HasOrbitalAttackUnlocked())throw new Exception("Recompensa incorrecta tras preparar el morral.");
             await CheckWeaponGrip(player);
             browser.Open();
             typeof(XunjuuLudotecaBrowser).GetMethod("ShowPage",System.Reflection.BindingFlags.NonPublic|System.Reflection.BindingFlags.Instance).Invoke(browser,new object[]{Enum.Parse(typeof(XunjuuLudotecaBrowser).GetNestedType("Page",System.Reflection.BindingFlags.NonPublic),"Fauna"),false});
@@ -93,6 +96,7 @@ public static class XunjuuCaptureFlowValidation
         finally
         {
             foreach(var item in saved){string key="xunjuu.fauna.capturada."+item.Key;if(item.Value<0)PlayerPrefs.DeleteKey(key);else PlayerPrefs.SetInt(key,item.Value);}
+            foreach(var item in plantSaved){string key=XunjuuMedicinalPlantCatalog.SavePrefix+item.Key;if(item.Value<0)PlayerPrefs.DeleteKey(key);else PlayerPrefs.SetInt(key,item.Value);}
             PlayerPrefs.Save();Time.timeScale=1;
             EditorApplication.ExitPlaymode();
             if(Application.isBatchMode)EditorApplication.delayCall+=()=>EditorApplication.Exit(passed?0:1);

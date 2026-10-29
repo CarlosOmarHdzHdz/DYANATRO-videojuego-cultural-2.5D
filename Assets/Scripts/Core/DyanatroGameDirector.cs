@@ -13,19 +13,33 @@ public class DyanatroGameDirector : MonoBehaviour
 {
     // Palette derived from the textile-color study supplied with the project.
     // It is used only by the presentation layer of the main menu.
-    private static readonly Color MenuIndigo = new Color(0.055f, 0.075f, 0.18f, 1f);
-    private static readonly Color MenuIndigoLight = new Color(0.12f, 0.17f, 0.34f, 1f);
+    private static readonly Color MenuIndigo = new Color(0.045f, 0.105f, 0.09f, 1f);
+    private static readonly Color MenuIndigoLight = new Color(0.12f, 0.23f, 0.19f, 1f);
     private static readonly Color MenuGrana = new Color(0.68f, 0.12f, 0.24f, 1f);
     private static readonly Color MenuMagenta = new Color(0.78f, 0.18f, 0.42f, 1f);
     private static readonly Color MenuYellow = new Color(0.96f, 0.72f, 0.18f, 1f);
     private static readonly Color MenuGreen = new Color(0.19f, 0.52f, 0.30f, 1f);
+    private static readonly Color MenuBlue = new Color(0.32f, 0.63f, 0.88f, 1f);
+    private static readonly Color MenuViolet = new Color(0.60f, 0.45f, 0.85f, 1f);
+    private static readonly Color MenuTeal = new Color(0.16f, 0.65f, 0.64f, 1f);
     private static readonly Color MenuCream = new Color(0.96f, 0.92f, 0.80f, 1f);
 
     public bool IsInPrologue => inPrologue;
-    public bool IsGameplayHudVisible => gameStarted && !inPrologue && !IsIntroVideoVisible && !deathScreenShown;
+    public bool IsGameplayHudVisible => gameStarted && !inPrologue && !IsIntroVideoVisible && !deathScreenShown
+        && !isPaused && (ludotecaBrowser == null || !ludotecaBrowser.IsOpen);
     public bool IsIntroVideoVisible => introVideoPanel != null && introVideoPanel.activeInHierarchy;
     public bool IsTimelinePrologueVisible => prologuePanel != null && prologuePanel.activeInHierarchy;
     public bool IsControlsSidebarVisible => controlsSidebar != null && controlsSidebar.activeInHierarchy;
+    public bool IsInventoryOpen => player!=null&&player.TryGetComponent<XunjuuInventoryUI>(out var inventoryUi)&&inventoryUi.IsPanelOpen;
+    public bool IsQuitConfirmationVisible => quitDialog!=null&&quitDialog.activeInHierarchy;
+    public bool IsLudotecaOpen => ludotecaBrowser != null && ludotecaBrowser.IsOpen;
+    public bool IsSettingsOpen => presentationSettings != null && presentationSettings.IsOpen;
+    private XunjuuPresentationSettings presentationSettings;
+    private static bool restartIntoGame;
+    private static bool sceneTransitionPending;
+
+    [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+    private static void ResetPresentationSession() { restartIntoGame = false; sceneTransitionPending = false; }
     // ========================================================================
     // Xunjuú v0.1 - Dirección editable del nivel 1
     // Acción: conservar coleccionables, bosque y milpas creados en Hierarchy.
@@ -38,7 +52,7 @@ public class DyanatroGameDirector : MonoBehaviour
 
     [Header("Audio")]
     [SerializeField] private AudioClip backgroundMusic;
-    [Tooltip("Volumen de la musica mientras se muestra el menu inicial.")]
+    [Tooltip("Volumen de referencia de la pista. El menu y el prologo permanecen sin musica de fondo.")]
     [SerializeField, Range(0.2f, 1f)] private float menuMusicVolume = 0.82f;
     [Tooltip("Reduccion aplicada al entrar a la partida. 0.55 equivale a bajar 55 por ciento.")]
     [SerializeField, Range(0f, 0.8f)] private float gameplayMusicReduction = 0.55f;
@@ -126,9 +140,11 @@ public class DyanatroGameDirector : MonoBehaviour
     private Canvas uiCanvas;
     private GameObject mainMenuPanel;
     private GameObject pausePanel;
+    private GameObject pauseControlsPanel;
     private GameObject deathPanel;
     private GameObject prologuePanel;
     private GameObject introVideoPanel;
+    private GameObject introLoadingPanel;
     private GameObject hudRoot;
     private GameObject controlsSidebar;
     private XunjuuLudotecaBrowser ludotecaBrowser;
@@ -156,12 +172,19 @@ public class DyanatroGameDirector : MonoBehaviour
     private GameObject collectibleGuideRoot;
     private Image guideArrowImage;
     private Text guideDistanceText;
+    private Transform cachedGuideTarget;
+    private string cachedGuideLabel,lastGuideLabel;
+    private float nextGuideTargetUpdate;
+    private int lastGuideDistance=int.MinValue;
+    public int GuideTargetSearchCount { get; private set; }
     private Text protagonistNameText;
     private Text missionFeedbackText;
     private Outline missionFeedbackOutline;
     private Shadow missionFeedbackShadow;
     private AudioSource musicSource;
     private Coroutine musicVolumeRoutine;
+    private bool musicHasStarted;
+    private bool musicSuspended;
     private Vector3 cameraVelocity;
     private bool gameStarted;
     private bool inPrologue;
@@ -192,14 +215,14 @@ public class DyanatroGameDirector : MonoBehaviour
     {
         "Esta aventura de ficción está ambientada en San Felipe del Progreso.",
         "Alimentos: maiz, frijol, haba, calabaza, papa, trigo y hortalizas.",
-        "Mateo Jnatr'o es P'antreje Jnatr'o, el cazador que habla.",
+        "DYANATR’O recorre su comunidad para reunir palabras y recuerdos compartidos.",
         "Lluvia, milpa y alimento en peligro.",
-        "Mateo debe ser el cazador que habla y proteger al pueblo.",
-        "Mateo comienza sin arma: primero aprende a caminar, saltar, golpear y usar el morral.",
+        "Recuperar la memoria también significa escuchar, reconocer el territorio y compartir lo aprendido.",
+        "El recorrido comienza sin arma: aprende a caminar, saltar, defenderte y usar el morral.",
         "Cinco flores-palabra recuperadas: comienza el registro de la fauna, todavía sin arma.",
-        "Seis animales desorientados deben ser resguardados y registrados antes de seguir el rastro de los Dyanatr'o.",
-        "Tras vencer a los cinco Dyanatr'o, el giro protector abre el combate contra Ocelotl.",
-        "Con el camino libre, Mateo puede volver y compartir las palabras recuperadas."
+        "Después de registrar seis animales, visita el huerto, reconoce las plantas y prepara una infusión en tu morral.",
+        "Con el morral preparado, enfrenta cinco sombras de ficción y después a Ocelotl.",
+        "El camino termina al volver a la comunidad con los recuerdos reunidos. Aprender es el primer paso para compartir."
     };
     private readonly string[] introVideoMazahuaLines =
     {
@@ -217,6 +240,15 @@ public class DyanatroGameDirector : MonoBehaviour
 
     void Awake()
     {
+        sceneTransitionPending = false;
+        XunjuuPresentationPreferences.Changed += ApplyPresentationPreferences;
+        // Evitar el autoplay de una fuente serializada antes de preparar el menu.
+        musicSource = GetComponent<AudioSource>();
+        if (musicSource != null)
+        {
+            musicSource.playOnAwake = false;
+            musicSource.Stop();
+        }
         mainCamera = Camera.main;
         GameObject playerObject = GameObject.FindGameObjectWithTag("Player");
         if (playerObject != null)
@@ -238,10 +270,16 @@ public class DyanatroGameDirector : MonoBehaviour
         if (GetComponent<XunjuuSceneVisualPolicy>() == null) gameObject.AddComponent<XunjuuSceneVisualPolicy>();
         if (GetComponent<XunjuuFaunaCaptureSystem>() == null) gameObject.AddComponent<XunjuuFaunaCaptureSystem>();
         if (GetComponent<XunjuuMedicinalPlantSystem>() == null) gameObject.AddComponent<XunjuuMedicinalPlantSystem>();
+        if (GetComponent<XunjuuHerbalLearningMission>() == null) gameObject.AddComponent<XunjuuHerbalLearningMission>();
+        if (GetComponent<XunjuuHudLayout>() == null) gameObject.AddComponent<XunjuuHudLayout>();
     }
-    void Start()
+    IEnumerator Start()
     {
+        XunjuuSceneTransition.ShowStartup();
+        // Draw a real transition before Unity starts creating the large world.
+        yield return null;
         BuildInterface();
+        XunjuuTypography.ApplyScene();
         SubscribeLudotecaToLevelCompletion();
         StartMusic();
         ImproveCameraStart();
@@ -251,16 +289,34 @@ public class DyanatroGameDirector : MonoBehaviour
         DisableUnsupportedTerrainTreeSystem();
         DisableGeneratedForest();
         // Xunjuu v0.1 - ACCION: conservar los bosques editados en Hierarchy.
-        SpawnGroundedForest(false);
+        XunjuuSceneTransition.SetStartupStage(0.16f, "Cuidando el bosque");
+        yield return StartCoroutine(SpawnGroundedForestRoutine(false));
+        yield return null;
+        XunjuuSceneTransition.SetStartupStage(0.34f, "Vistiendo el paisaje");
         SpawnGroundDecorations();
-        SpawnTallGrass();
+        yield return null;
+        XunjuuSceneTransition.SetStartupStage(0.49f, "Preparando la vegetación");
+        yield return StartCoroutine(SpawnTallGrass());
+        yield return null;
+        XunjuuSceneTransition.SetStartupStage(0.64f, "Preparando la milpa");
         SpawnCornMilpas();
+        yield return null;
+        XunjuuSceneTransition.SetStartupStage(0.77f, "Ubicando las palabras del territorio");
         SpawnMazahuaWordCollectibles();
         PrepareInitialGameState();
+        yield return null;
+        XunjuuSceneTransition.SetStartupStage(0.88f, "Organizando las misiones");
         SpawnClouds();
         EnsureLevelOptimizer();
         AttachDepthSorters();
         StartCoroutine(AttachDepthSortersDelayed());
+        XunjuuSceneTransition.SetStartupStage(1f, "El recorrido está listo");
+        if(restartIntoGame)
+        {
+            restartIntoGame = false;
+            BeginGame();
+        }
+        else XunjuuSceneTransition.Dismiss();
     }
 
     // ========================================================================
@@ -279,25 +335,32 @@ public class DyanatroGameDirector : MonoBehaviour
     {
         UpdateHealthHud();
         UpdateCollectibleGuide();
-
-        if (!gameStarted && mainMenuPanel != null && mainMenuPanel.activeSelf && Input.GetKeyDown(KeyCode.Return))
-            BeginGame();
+        if (gameStarted && !deathScreenShown && player != null && player.IsDead())
+        {
+            deathScreenShown = true;
+            StartCoroutine(ShowDeathScreenAfterDelay());
+        }
+        if (deathScreenShown) return;
+        if(IsQuitConfirmationVisible&&Input.GetKeyDown(KeyCode.Escape))
+        {CancelConfirmation();return;}
+        if(IsSettingsOpen)
+        {if(Input.GetKeyDown(KeyCode.Escape))presentationSettings.Close();return;}
+        if(pauseControlsPanel!=null&&pauseControlsPanel.activeInHierarchy&&Input.GetKeyDown(KeyCode.Escape))
+        {pauseControlsPanel.SetActive(false);return;}
+        if(IsInventoryOpen&&Input.GetKeyDown(KeyCode.Escape))
+        {player.GetComponent<XunjuuInventoryUI>().SetVisible(false);return;}
 
         if (gameStarted && !inPrologue
             && (ludotecaBrowser == null || !ludotecaBrowser.BlocksPauseInput)
             && Input.GetKeyDown(KeyCode.Escape))
             SetPause(!isPaused);
 
-        if (gameStarted && !deathScreenShown && player != null && player.IsDead())
-        {
-            deathScreenShown = true;
-            StartCoroutine(ShowDeathScreenAfterDelay());
-        }
     }
 
     void LateUpdate()
     {
         FollowPlayerCamera();
+        SynchronizeMusicPlayback();
     }
 
     // ACCIÓN Xunjuú v0.1: usar un solo controlador para optimizar objetos lejanos.
@@ -333,6 +396,7 @@ public class DyanatroGameDirector : MonoBehaviour
         if (introVideoPanel != null)
             introVideoPanel.SetActive(false);
         hudRoot.SetActive(false);
+        SynchronizeMusicPlayback();
     }
 
     void BuildInterface()
@@ -352,42 +416,39 @@ public class DyanatroGameDirector : MonoBehaviour
 
         BuildMainMenuInterface();
 
-        pausePanel = CreateFullPanel("MenuPausa", new Color(MenuIndigo.r, MenuIndigo.g, MenuIndigo.b, 0.9f));
+        pausePanel = CreateFullPanel("MenuPausa", MenuIndigo);
+        XunjuuMenuBackdrop.Attach(pausePanel.transform,true);
         CreateTextileBand(pausePanel.transform, "Banda_Superior", new Vector2(0f, 496f));
         CreateTextileBand(pausePanel.transform, "Banda_Inferior", new Vector2(0f, -496f));
         GameObject pauseFrame = CreateMenuPanel(
             pausePanel.transform,
             "MarcoPausa",
-            Vector2.zero,
-            new Vector2(450f, 640f),
-            new Color(0.035f, 0.055f, 0.14f, 0.94f),
+            new Vector2(335,0),
+            new Vector2(600f, 900f),
+            XunjuuInterfaceTheme.Ink,
             new Color(MenuCream.r, MenuCream.g, MenuCream.b, 0.8f),
-            2.5f);
-        Text pauseTitle = CreateLabel(pauseFrame.transform, "PAUSA", 56, new Vector2(0f, 180f), new Vector2(370f, 76f), MenuCream);
+            1f);
+        XunjuuInterfaceTheme.Frame(pauseFrame.transform,new Vector2(600,900));
+        Text pauseTitle = CreateLabel(pauseFrame.transform, "PAUSA", 56, new Vector2(0f, 325f), new Vector2(450f, 76f), MenuCream);
         ApplyMenuHeadingStyle(pauseTitle, MenuCream);
-        CreateMenuRule(pauseFrame.transform, new Vector2(0f, 126f), new Vector2(334f, 3f), MenuYellow);
-        CreateButton(pauseFrame.transform, "Continuar", new Vector2(0f, 55f), () => SetPause(false));
-        CreateButton(pauseFrame.transform, "Ludoteca", new Vector2(0f, -30f), OpenLudotecaFromPause);
-        CreateButton(pauseFrame.transform, "Reiniciar", new Vector2(0f, -115f), RestartScene);
-        CreateButton(pauseFrame.transform, "Controles", new Vector2(0f, -200f), () => {
-            if (controlsSidebar != null) controlsSidebar.SetActive(!controlsSidebar.activeSelf);
-        });
-        CreateButton(pauseFrame.transform, "Menu inicial", new Vector2(0f, -285f), ReturnToMainMenu);
+        CreateLabel(pauseFrame.transform,"RESPIRA  /  EL RECORRIDO TE ESPERA",14,new Vector2(0,390),new Vector2(500,30),XunjuuInterfaceTheme.Muted);
+        CreateMenuRule(pauseFrame.transform, new Vector2(0f, 274f), new Vector2(420f, 2f), XunjuuInterfaceTheme.Gold);
+        var resume=CreateButton(pauseFrame.transform, "Continuar", new Vector2(0f, 217f), () => SetPause(false));
+        var library=CreateButton(pauseFrame.transform, "Ludoteca", new Vector2(0f, 139f), OpenLudotecaFromPause);
+        var controls=CreateButton(pauseFrame.transform, "Controles", new Vector2(0f, 61f), TogglePauseControls);
+        var settings=CreateButton(pauseFrame.transform, "Ajustes", new Vector2(0f, -17f), OpenPresentationSettings);
+        var restart=CreateButton(pauseFrame.transform, "Reiniciar", new Vector2(0f, -95f), ()=>ShowSessionConfirmation(true));
+        var home=CreateButton(pauseFrame.transform, "Menú inicial", new Vector2(0f, -173f), ()=>ShowSessionConfirmation(false));
+        CreateMenuRule(pauseFrame.transform,new Vector2(0,-230),new Vector2(348,1),new Color(.55f,.66f,.55f,.5f));
+        var exit=CreateButton(pauseFrame.transform, "Salir del juego", new Vector2(0f, -287f), ShowQuitConfirmation);
+        CreateLabel(pauseFrame.transform,"TAB / FLECHAS  seleccionar · ENTER  aceptar\nESC  continuar la partida",15,new Vector2(0,-393),new Vector2(500,48),XunjuuInterfaceTheme.Muted);
+        XunjuuMenuNavigation.Configure(pauseFrame,this,1,resume,library,controls,settings,restart,home,exit);
 
-        deathPanel = CreateFullPanel("PantallaMuerte", new Color(0.035f, 0.006f, 0.008f, 0.92f));
-        ApplyPanelSprite(deathPanel, menuBackgroundSprite, new Color(0.36f, 0.12f, 0.1f, 0.18f));
-        AddUiSprite(deathPanel.transform, enemyMenuSprite, new Vector2(-420f, -180f), new Vector2(260f, 260f), new Color(0.62f, 0.55f, 0.7f, 0.8f));
-        AddUiSprite(deathPanel.transform, treeMenuSprite, new Vector2(460f, -165f), new Vector2(330f, 330f), new Color(0.72f, 0.8f, 0.6f, 0.48f));
-        AddUiSprite(deathPanel.transform, cloudMenuSprite, new Vector2(0f, 265f), new Vector2(720f, 250f), new Color(1f, 0.86f, 0.72f, 0.22f));
-        CreateLabel(deathPanel.transform, "Has caido", 72, new Vector2(0f, 145f), new Vector2(900f, 110f), new Color(1f, 0.78f, 0.48f));
-        CreateLabel(deathPanel.transform, "Las Dyanatr'o avanzan sobre la memoria del bosque", 30, new Vector2(0f, 55f), new Vector2(1150f, 80f), Color.white);
-        CreateLabel(deathPanel.transform, "Vuelve a levantarte y recupera las palabras mazahuas.", 26, new Vector2(0f, 5f), new Vector2(1050f, 65f), new Color(0.82f, 0.92f, 0.78f));
-        CreateButton(deathPanel.transform, "Reintentar", new Vector2(0f, -105f), RestartScene);
-        CreateButton(deathPanel.transform, "Menu inicial", new Vector2(0f, -195f), ReturnToMainMenu);
+        BuildDeathInterface();
 
         prologuePanel = CreateFullPanel("Prologo", new Color(0f, 0f, 0f, 0.48f));
-        Text prologueTitle = CreateLabel(prologuePanel.transform, "PROLOGO", 86, new Vector2(0f, 250f), new Vector2(1150f, 120f), new Color(1f, 0.78f, 0.24f));
-        ApplyPixelArcadeStyle(prologueTitle, new Color(1f, 0.78f, 0.24f), 4f);
+        Text prologueTitle = CreateLabel(prologuePanel.transform, "EL INICIO DEL RECORRIDO", 40, new Vector2(0f, 330f), new Vector2(1150f, 74f), XunjuuInterfaceTheme.Gold);
+        prologueTitle.fontStyle=FontStyle.Bold;
         prologueSkipButton = CreateButton(prologuePanel.transform, "Saltar prologo", new Vector2(690f, 455f), SkipPrologue);
 
         introVideoPanel = CreateFullPanel("IntroVideoPrologo", Color.black);
@@ -411,11 +472,13 @@ public class DyanatroGameDirector : MonoBehaviour
         hudRect.anchorMax = Vector2.one;
         hudRect.offsetMin = Vector2.zero;
         hudRect.offsetMax = Vector2.zero;
-        objectiveText = CreateLabel(hudRoot.transform, GetMissionIntroText(), 24, new Vector2(0f, 488f), new Vector2(1200f, 72f), Color.white);
-        objectiveText.alignment = TextAnchor.MiddleCenter;
+        GameStateManager.RegisterHud(hudRoot);
+        var flowerCard=XunjuuQuestCard.Create(hudRoot.transform,"Objetivo_Flores_Memoria");
+        flowerCard.Set("01 / MEMORIA DEL TERRITORIO",GetMissionIntroText(),mazahuaWordsCollected,mazahuaWordGoal);
+        objectiveText=flowerCard.Body;
         protagonistNameText = CreateLabel(
             hudRoot.transform,
-            "Mazahua: P'antreje Jnatr'o\nEspañol: El cazador que habla",
+            "DYANATR’O\nMemoria y territorio",
             18,
             new Vector2(668f, 428f),
             new Vector2(450f, 58f),
@@ -431,6 +494,8 @@ public class DyanatroGameDirector : MonoBehaviour
         missionFeedbackOutline = missionFeedbackText.gameObject.AddComponent<Outline>();
         missionFeedbackShadow = missionFeedbackText.gameObject.AddComponent<Shadow>();
         ApplyMissionFeedbackStyle(false);
+        missionFeedbackText.gameObject.SetActive(false); // Sustituido por un unico panel bilingue.
+        XunjuuMissionNotice.For(this);
 
         // Xunjuú v0.1 - ACCION: crear el navegador al final para que siempre
         // aparezca delante del menu, del prologo y del HUD.
@@ -438,6 +503,8 @@ public class DyanatroGameDirector : MonoBehaviour
         ludotecaObject.transform.SetParent(uiCanvas.transform, false);
         ludotecaBrowser = ludotecaObject.AddComponent<XunjuuLudotecaBrowser>();
         ludotecaBrowser.Initialize(uiCanvas, treeMenuSprite, flowerSprite, cloudMenuSprite);
+        presentationSettings=XunjuuPresentationSettings.Create(uiCanvas.transform,this);
+        XunjuuInterfaceTheme.PolishButtons(uiCanvas.transform);
     }
 
     void BuildCollectibleGuide(Transform parent)
@@ -483,29 +550,38 @@ public class DyanatroGameDirector : MonoBehaviour
 
     void UpdateCollectibleGuide()
     {
-        bool canShowGuide = gameStarted && !inPrologue && !IsOpeningTutorialActive && !isPaused && !deathScreenShown && playerTransform != null && mainCamera != null;
+        bool canShowGuide = gameStarted && !inPrologue && !IsOpeningTutorialActive && !isPaused && !deathScreenShown && !IsLudotecaOpen && !IsInventoryOpen && Time.timeScale>0 && playerTransform != null && mainCamera != null;
         if (!canShowGuide)
         {
             SetCollectibleGuideVisible(false);
+            nextGuideTargetUpdate=0;
             return;
         }
 
-        Transform target = null;
-        string targetLabel = string.Empty;
+        if(Time.unscaledTime>=nextGuideTargetUpdate || (cachedGuideTarget!=null&&!cachedGuideTarget.gameObject.activeInHierarchy))
+        {
+        nextGuideTargetUpdate=Time.unscaledTime+.18f;GuideTargetSearchCount++;
+        cachedGuideTarget=null;cachedGuideLabel=string.Empty;
         MazahuaWordCollectible nearest = levelTwoMission == null || levelTwoMission.CurrentPhase == XunjuuLevel2KillMission.MissionPhase.Locked
             ? FindNearestWordCollectible() : null;
         if (nearest != null)
         {
-            target = nearest.transform;
-            targetLabel = "Siguiente flor-palabra";
+            cachedGuideTarget = nearest.transform;
+            cachedGuideLabel = "Siguiente flor-palabra";
         }
         else if (levelTwoMission != null)
         {
-            target = levelTwoMission.FindNearestActiveObjective(playerTransform.position);
-            targetLabel = levelTwoMission.GetGuideLabel();
+            cachedGuideTarget = levelTwoMission.FindNearestActiveObjective(playerTransform.position);
+            cachedGuideLabel = levelTwoMission.GetGuideLabel();
+        }
+        var herbalMission=GetComponent<XunjuuHerbalLearningMission>();
+        if(herbalMission!=null&&herbalMission.GuideTarget!=null)
+        {
+            cachedGuideTarget=herbalMission.GuideTarget;cachedGuideLabel="Huerto · aprender y recolectar";
+        }
         }
 
-        if (target == null)
+        if (cachedGuideTarget == null)
         {
             SetCollectibleGuideVisible(false);
             return;
@@ -513,7 +589,7 @@ public class DyanatroGameDirector : MonoBehaviour
 
         SetCollectibleGuideVisible(true);
 
-        Vector3 toTarget = target.position - playerTransform.position;
+        Vector3 toTarget = cachedGuideTarget.position - playerTransform.position;
         float distance = new Vector2(toTarget.x, toTarget.z).magnitude;
         Vector3 flatRight = mainCamera.transform.right;
         Vector3 flatForward = mainCamera.transform.forward;
@@ -533,8 +609,9 @@ public class DyanatroGameDirector : MonoBehaviour
             guideArrowRect.localRotation = Quaternion.Euler(0f, 0f, angle);
         }
 
-        if (guideDistanceText != null)
-            guideDistanceText.text = $"{targetLabel}: {Mathf.RoundToInt(distance)} m";
+        int meters=Mathf.RoundToInt(distance);
+        if (guideDistanceText != null && (meters!=lastGuideDistance || cachedGuideLabel!=lastGuideLabel))
+        {lastGuideDistance=meters;lastGuideLabel=cachedGuideLabel;guideDistanceText.text=$"{cachedGuideLabel}: {meters} m";}
     }
 
     MazahuaWordCollectible FindNearestWordCollectible()
@@ -561,7 +638,7 @@ public class DyanatroGameDirector : MonoBehaviour
 
     void SetCollectibleGuideVisible(bool visible)
     {
-        if (collectibleGuideRoot != null) collectibleGuideRoot.SetActive(visible);
+        if (collectibleGuideRoot != null && collectibleGuideRoot.activeSelf!=visible) collectibleGuideRoot.SetActive(visible);
         if (guideArrowImage != null)
             guideArrowImage.enabled = visible;
         if (guideDistanceText != null)
@@ -599,60 +676,69 @@ public class DyanatroGameDirector : MonoBehaviour
         CreateTextileBand(mainMenuPanel.transform, "Banda_Textil_Superior", new Vector2(0f, 496f));
         CreateTextileBand(mainMenuPanel.transform, "Banda_Textil_Inferior", new Vector2(0f, -496f));
 
-        // Existing scene sprites stay decorative and do not participate in gameplay.
-        AddUiSprite(mainMenuPanel.transform, cloudMenuSprite, new Vector2(-630f, 300f), new Vector2(390f, 170f), new Color(1f, 1f, 1f, 0.18f));
-        AddUiSprite(mainMenuPanel.transform, cloudMenuSprite, new Vector2(535f, 315f), new Vector2(390f, 170f), new Color(1f, 1f, 1f, 0.12f));
-        AddUiSprite(mainMenuPanel.transform, treeMenuSprite, new Vector2(-765f, -190f), new Vector2(380f, 420f), new Color(0.68f, 0.84f, 0.52f, 0.58f));
-        AddUiSprite(mainMenuPanel.transform, playerMenuSprite, new Vector2(-475f, -122f), new Vector2(300f, 360f), Color.white);
-        CreateTextileColumn(mainMenuPanel.transform, new Vector2(-700f, 35f), 5);
-
         GameObject frame = CreateMenuPanel(
             mainMenuPanel.transform,
             "Marco_Principal",
             new Vector2(335f, 0f),
-            new Vector2(690f, 610f),
-            new Color(MenuIndigoLight.r, MenuIndigoLight.g, MenuIndigoLight.b, 0.94f),
-            MenuCream,
-            2.5f);
+            new Vector2(800f, 760f),
+            XunjuuInterfaceTheme.Ink,
+            new Color(MenuYellow.r,MenuYellow.g,MenuYellow.b,.55f),
+            1f);
 
-        CreateMenuRule(frame.transform, new Vector2(0f, 240f), new Vector2(550f, 3f), MenuYellow);
-        Text title = CreateLabel(frame.transform, "DYANATR'O", 76, new Vector2(0f, 168f), new Vector2(610f, 105f), MenuCream);
-        ApplyMenuHeadingStyle(title, MenuCream);
-        Text subtitle = CreateLabel(frame.transform, "LAS SOMBRAS DEL OLVIDO", 30, new Vector2(0f, 98f), new Vector2(610f, 54f), MenuYellow);
-        subtitle.fontStyle = FontStyle.Bold;
-        CreateLabel(frame.transform, "MEMORIA  ·  TERRITORIO  ·  PALABRA", 17, new Vector2(0f, 45f), new Vector2(580f, 36f), new Color(0.72f, 0.88f, 0.70f, 1f));
-        CreateMenuRule(frame.transform, new Vector2(0f, 15f), new Vector2(470f, 2f), new Color(MenuCream.r, MenuCream.g, MenuCream.b, 0.56f));
+        XunjuuBranding.Create(frame.transform, new Vector2(730f, 250f), new Vector2(0f, 225f));
+        CreateMenuRule(frame.transform, new Vector2(0f, 74f), new Vector2(650f, 1f), new Color(MenuCream.r, MenuCream.g, MenuCream.b, 0.25f));
 
-        CreateTextileMenuButton(frame.transform, "INICIAR", new Vector2(0f, -67f), BeginGame, MenuYellow);
-        CreateTextileMenuButton(frame.transform, "LUDOTECA", new Vector2(0f, -158f), OpenLudoteca, MenuMagenta);
-        CreateTextileMenuButton(frame.transform, "SALIR", new Vector2(0f, -249f), QuitGame, MenuGreen);
+        var start=CreateTextileMenuButton(frame.transform, "INICIAR", new Vector2(0f, 0f), BeginGame, MenuGreen);
+        var library=CreateTextileMenuButton(frame.transform, "LUDOTECA", new Vector2(0f, -85f), OpenLudoteca, MenuMagenta);
+        var settings=CreateTextileMenuButton(frame.transform, "AJUSTES", new Vector2(0f, -170f), OpenPresentationSettings, MenuViolet);
+        var exit=CreateTextileMenuButton(frame.transform, "SALIR", new Vector2(0f, -255f), QuitGame, MenuGrana);
+        XunjuuInterfaceTheme.Frame(frame.transform,new Vector2(800,760));
+        XunjuuMenuNavigation.Configure(frame,this,0,start,library,settings,exit);
+    }
 
-        CreateTextileColumn(frame.transform, new Vector2(-292f, 0f), 4);
-        CreateTextileColumn(frame.transform, new Vector2(292f, 0f), 4);
+    void BuildDeathInterface()
+    {
+        deathPanel = CreateFullPanel("PantallaMuerte", new Color(.055f, .025f, .085f, 1f));
+        // Ilustración inspirada en el Día de Muertos; los controles son UI real.
+        var background = new GameObject("Ofrenda_Dia_De_Muertos", typeof(RectTransform), typeof(RawImage), typeof(AspectRatioFitter));
+        background.transform.SetParent(deathPanel.transform, false);
+        var image = background.GetComponent<RawImage>();
+        image.texture = Resources.Load<Texture2D>("Sprites/UI/DeathOfrenda_20261027");
+        image.raycastTarget = false;
+        if (image.texture == null)
+        {
+            image.texture = Resources.Load<Texture2D>("Sprites/UI/MenuHighlands_20261019");
+            image.color = new Color(.40f, .32f, .48f, 1f);
+        }
+        var fit = background.GetComponent<AspectRatioFitter>();
+        fit.aspectMode = AspectRatioFitter.AspectMode.EnvelopeParent;
+        fit.aspectRatio = image.texture != null ? image.texture.width / (float)image.texture.height : 16f / 9f;
+
+        var frame = CreateMenuPanel(deathPanel.transform, "Marco_Reintentar", new Vector2(0, -15),
+            new Vector2(1100, 760), new Color(.025f, .012f, .055f, .60f), Color.clear, 0);
+        // Outline duplica el relleno completo y vuelve opaca una tarjeta translúcida.
+        frame.GetComponent<Outline>().enabled = false;
+        XunjuuPapelPicadoTrim.Attach(frame.transform, new Color(1, .65f, .26f, .58f), false);
+        XunjuuBranding.Create(frame.transform, new Vector2(610, 195), new Vector2(0, 245));
+        var marigold = new Color(1f, .68f, .23f);
+        CreateLabel(frame.transform, "ENTRE FLORES Y MEMORIA", 19, new Vector2(0, 124), new Vector2(850, 26), marigold);
+        XunjuuDeathScreenStyle.Title(frame.transform);
+        CreateLabel(frame.transform, "Tu historia aún no termina.\nVuelve a recorrer el camino y a descubrir sus palabras.",
+            25, new Vector2(0, -77), new Vector2(880, 70), new Color(.96f, .91f, .87f));
+        CreateMenuRule(frame.transform, new Vector2(0, -123), new Vector2(950, 1), new Color(.92f, .59f, .22f, .4f));
+        var retry = XunjuuDeathScreenStyle.Button(frame.transform, "Button_Reintentar", "REINTENTAR", new Vector2(-250, -190), RestartScene, true);
+        var home = XunjuuDeathScreenStyle.Button(frame.transform, "Button_Menu inicial", "MENÚ INICIAL", new Vector2(250, -190), ReturnToMainMenu, false);
+        CreateLabel(frame.transform, "Reintentar comienza una nueva partida.", 20,
+            new Vector2(0, -265), new Vector2(900, 38), new Color(.84f, .77f, .74f));
+        CreateLabel(frame.transform, "TAB / FLECHAS  seleccionar     ·     ENTER  aceptar", 17,
+            new Vector2(0, -320), new Vector2(900, 34), new Color(.74f, .68f, .73f));
+        XunjuuMenuNavigation.Configure(frame, this, 10, retry, home);
+        deathPanel.AddComponent<XunjuuPanelReveal>();
     }
 
     void AddMenuBackground(Transform parent)
     {
-        if (parent == null)
-            return;
-
-        GameObject background = new GameObject("Fondo_Visual_Menu");
-        background.transform.SetParent(parent, false);
-        background.transform.SetAsFirstSibling();
-        RectTransform rect = background.AddComponent<RectTransform>();
-        rect.anchorMin = Vector2.zero;
-        rect.anchorMax = Vector2.one;
-        rect.offsetMin = Vector2.zero;
-        rect.offsetMax = Vector2.zero;
-
-        Image image = background.AddComponent<Image>();
-        image.sprite = menuBackgroundSprite;
-        image.type = Image.Type.Simple;
-        image.preserveAspect = false;
-        image.color = menuBackgroundSprite != null
-            ? new Color(0.23f, 0.30f, 0.52f, 0.18f)
-            : new Color(0.03f, 0.04f, 0.11f, 0.18f);
-        image.raycastTarget = false;
+        XunjuuMenuBackdrop.Attach(parent,false);
     }
 
     void CreateTextileBand(Transform parent, string name, Vector2 position)
@@ -661,18 +747,18 @@ public class DyanatroGameDirector : MonoBehaviour
             parent,
             name,
             position,
-            new Vector2(1940f, 80f),
-            new Color(0.025f, 0.035f, 0.09f, 0.96f),
-            new Color(MenuCream.r, MenuCream.g, MenuCream.b, 0.42f),
+            new Vector2(1940f, 44f),
+            new Color(0.025f, 0.055f, 0.045f, 0.86f),
+            new Color(MenuCream.r, MenuCream.g, MenuCream.b, 0.22f),
             1f);
 
-        const int motifCount = 25;
-        float spacing = 68f;
+        const int motifCount = 17;
+        float spacing = 98f;
         float firstPosition = -((motifCount - 1) * spacing) * 0.5f;
         for (int index = 0; index < motifCount; index++)
         {
             Color accent = index % 4 == 0 ? MenuYellow : index % 4 == 1 ? MenuGrana : index % 4 == 2 ? MenuGreen : MenuMagenta;
-            CreateMenuDiamond(band.transform, new Vector2(firstPosition + index * spacing, 0f), 21f, accent, MenuIndigo);
+            CreateMenuDiamond(band.transform, new Vector2(firstPosition + index * spacing, 0f), 10f, accent, MenuIndigo);
         }
     }
 
@@ -715,13 +801,14 @@ public class DyanatroGameDirector : MonoBehaviour
         rect.sizeDelta = size;
         rect.anchoredPosition = position;
 
-        Image image = panel.AddComponent<Image>();
+        Image image = panel.AddComponent<XunjuuRoundedImage>();
         image.color = fill;
         image.raycastTarget = false;
 
         Outline outline = panel.AddComponent<Outline>();
         outline.effectColor = borderColor;
         outline.effectDistance = new Vector2(borderThickness, -borderThickness);
+        panel.AddComponent<XunjuuPanelReveal>();
         return panel;
     }
 
@@ -746,58 +833,33 @@ public class DyanatroGameDirector : MonoBehaviour
         label.color = fillColor;
         Shadow shadow = label.gameObject.AddComponent<Shadow>();
         shadow.effectColor = new Color(0.02f, 0.025f, 0.07f, 0.96f);
-        shadow.effectDistance = new Vector2(4f, -4f);
+        shadow.effectDistance = new Vector2(1.5f, -1.5f);
         Outline outline = label.gameObject.AddComponent<Outline>();
-        outline.effectColor = new Color(MenuGrana.r, MenuGrana.g, MenuGrana.b, 0.76f);
-        outline.effectDistance = new Vector2(1.6f, -1.6f);
+        outline.effectColor = new Color(.02f,.04f,.03f,.6f);
+        outline.effectDistance = new Vector2(.6f, -.6f);
     }
 
     Button CreateTextileMenuButton(Transform parent, string text, Vector2 position, UnityEngine.Events.UnityAction action, Color accent)
     {
-        GameObject buttonObject = new GameObject("MenuButton_" + text);
-        buttonObject.transform.SetParent(parent, false);
-        RectTransform rect = buttonObject.AddComponent<RectTransform>();
-        rect.sizeDelta = new Vector2(470f, 72f);
-        rect.anchoredPosition = position;
+        return XunjuuMenuButtonStyle.Create(parent, "MenuButton_" + text, text, position, new Vector2(470, 72), action);
+    }
 
-        Image image = buttonObject.AddComponent<Image>();
-        image.color = new Color(0.035f, 0.055f, 0.14f, 0.98f);
-        Button button = buttonObject.AddComponent<Button>();
-        button.targetGraphic = image;
-        button.onClick.AddListener(action);
-        button.transition = Selectable.Transition.ColorTint;
-        ColorBlock colors = button.colors;
+    void ApplyMenuButtonPalette(Button button, Color accent)
+    {
+        // A full colored surface makes each action recognizable beyond its border.
+        var image = button.GetComponent<Image>();
+        image.color = Color.Lerp(MenuIndigo, accent, accent == MenuYellow ? .40f : .52f);
+        var colors = button.colors;
         colors.normalColor = Color.white;
-        colors.highlightedColor = new Color(1f, 1f, 1f, 1f);
-        colors.pressedColor = new Color(0.78f, 0.78f, 0.78f, 1f);
-        colors.selectedColor = new Color(1f, 1f, 1f, 1f);
-        colors.colorMultiplier = 1f;
+        colors.highlightedColor = new Color(1.14f, 1.14f, 1.14f);
+        colors.selectedColor = new Color(1.10f, 1.10f, 1.10f);
+        colors.pressedColor = new Color(.78f, .78f, .78f);
+        colors.disabledColor = new Color(.58f, .58f, .58f, .65f);
+        colors.fadeDuration = .14f;
         button.colors = colors;
-
-        Outline outline = buttonObject.AddComponent<Outline>();
-        outline.effectColor = accent;
-        outline.effectDistance = new Vector2(2f, -2f);
-
-        GameObject accentBar = new GameObject("Acento_Color");
-        accentBar.transform.SetParent(buttonObject.transform, false);
-        RectTransform accentRect = accentBar.AddComponent<RectTransform>();
-        accentRect.anchorMin = new Vector2(0f, 0.5f);
-        accentRect.anchorMax = new Vector2(0f, 0.5f);
-        accentRect.pivot = new Vector2(0f, 0.5f);
-        accentRect.sizeDelta = new Vector2(9f, 58f);
-        accentRect.anchoredPosition = new Vector2(8f, 0f);
-        Image accentImage = accentBar.AddComponent<Image>();
-        accentImage.color = accent;
-        accentImage.raycastTarget = false;
-
-        CreateMenuDiamond(buttonObject.transform, new Vector2(-187f, 0f), 20f, accent, MenuIndigo);
-        Text label = CreateLabel(buttonObject.transform, text, 27, new Vector2(15f, 0f), new Vector2(350f, 64f), MenuCream);
-        label.fontStyle = FontStyle.Bold;
-        label.alignment = TextAnchor.MiddleLeft;
-
-        Text arrow = CreateLabel(buttonObject.transform, ">", 32, new Vector2(190f, 0f), new Vector2(42f, 62f), accent);
-        arrow.fontStyle = FontStyle.Bold;
-        return button;
+        var rect = button.GetComponent<RectTransform>();
+        CreateMenuRule(button.transform, new Vector2(0, rect.sizeDelta.y * .5f - 5),
+            new Vector2(rect.sizeDelta.x - 34, 1), new Color(accent.r, accent.g, accent.b, .28f));
     }
 
     GameObject CreateFullPanel(string name, Color color)
@@ -870,18 +932,48 @@ public class DyanatroGameDirector : MonoBehaviour
         musicSource.clip = backgroundMusic;
         musicSource.loop = true;
         musicSource.playOnAwake = false;
-        musicSource.volume = menuMusicVolume;
+        musicSource.volume = 0f;
         musicSource.spatialBlend = 0f;
-        musicSource.Play();
+        musicSource.ignoreListenerPause = false;
+        musicSource.Stop();
+        musicHasStarted = false;
+        musicSuspended = false;
     }
 
-    // ========================================================================
-    // Xunjuu v0.1 - Mezcla musical menu/juego
-    // ACCION: iniciar con presencia y bajar 55 por ciento al jugar.
-    // ========================================================================
+    // La pausa conserva la posicion de la pista; no usar Stop para reanudarla.
+    // Time.timeScale cubre tambien el morral y la ludoteca, que pausan por separado.
+    void SynchronizeMusicPlayback()
+    {
+        if (musicSource == null || musicSource.clip == null) return;
+        bool shouldPlay = gameStarted && !inPrologue && !IsIntroVideoVisible
+            && !isPaused && !deathScreenShown && Time.timeScale > 0f
+            && (ludotecaBrowser == null || !ludotecaBrowser.IsOpen);
+        if (!shouldPlay)
+        {
+            if (musicHasStarted && !musicSuspended)
+            {
+                musicSource.Pause();
+                musicSuspended = true;
+            }
+            return;
+        }
+        if (!musicHasStarted)
+        {
+            musicSource.Play();
+            musicHasStarted = true;
+            musicSuspended = false;
+            SetGameplayMusicVolume();
+        }
+        else if (musicSuspended)
+        {
+            musicSource.UnPause();
+            musicSuspended = false;
+        }
+    }
+
     void SetGameplayMusicVolume()
     {
-        float gameplayVolume = menuMusicVolume * (1f - gameplayMusicReduction);
+        float gameplayVolume = GameplayMusicVolume;
         if (musicVolumeRoutine != null)
             StopCoroutine(musicVolumeRoutine);
         musicVolumeRoutine = StartCoroutine(FadeMusicVolume(gameplayVolume));
@@ -896,7 +988,8 @@ public class DyanatroGameDirector : MonoBehaviour
         float elapsed = 0f;
         while (elapsed < musicFadeDuration)
         {
-            elapsed += Time.unscaledDeltaTime;
+            if (musicSuspended) { yield return null; continue; }
+            elapsed += Time.deltaTime;
             float progress = Mathf.Clamp01(elapsed / musicFadeDuration);
             musicSource.volume = Mathf.Lerp(initialVolume, targetVolume, Mathf.SmoothStep(0f, 1f, progress));
             yield return null;
@@ -905,6 +998,15 @@ public class DyanatroGameDirector : MonoBehaviour
         musicSource.volume = targetVolume;
         musicVolumeRoutine = null;
     }
+
+    void ApplyPresentationPreferences()
+    {
+        if(musicSource==null)return;
+        if(musicVolumeRoutine!=null){StopCoroutine(musicVolumeRoutine);musicVolumeRoutine=null;}
+        musicSource.volume=musicHasStarted?GameplayMusicVolume:0f;
+    }
+
+    void OpenPresentationSettings() { presentationSettings.Open(); }
 
     void ImproveCameraStart()
     {
@@ -1029,16 +1131,12 @@ public class DyanatroGameDirector : MonoBehaviour
 
     Font GetUiFont()
     {
-        Font font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-        if (font == null)
-            font = Resources.GetBuiltinResource<Font>("Arial.ttf");
-        return font;
+        return XunjuuTypography.Regular;
     }
 
     Font GetPixelUiFont()
     {
-        Font font = Resources.Load<Font>("Fonts/PressStart2P-Regular");
-        return font != null ? font : GetUiFont();
+        return XunjuuTypography.Regular;
     }
 
     void ApplyPixelArcadeStyle(Text label, Color fillColor, float thickness)
@@ -1123,13 +1221,15 @@ public class DyanatroGameDirector : MonoBehaviour
 
     Button CreateButton(Transform parent, string text, Vector2 position, UnityEngine.Events.UnityAction action)
     {
+        if (parent.name == "MarcoPausa")
+            return XunjuuMenuButtonStyle.Create(parent, "Button_" + text, text, position, new Vector2(348, 66), action);
         GameObject buttonObject = new GameObject("Button_" + text);
         buttonObject.transform.SetParent(parent, false);
         RectTransform rect = buttonObject.AddComponent<RectTransform>();
         rect.sizeDelta = new Vector2(348f, 66f);
         rect.anchoredPosition = position;
 
-        Image image = buttonObject.AddComponent<Image>();
+        Image image = buttonObject.AddComponent<XunjuuRoundedImage>();
         image.color = new Color(MenuIndigoLight.r, MenuIndigoLight.g, MenuIndigoLight.b, 0.98f);
 
         Color accent = GetTextileButtonAccent(text);
@@ -1138,6 +1238,7 @@ public class DyanatroGameDirector : MonoBehaviour
         outline.effectDistance = new Vector2(2f, -2f);
 
         Button button = buttonObject.AddComponent<Button>();
+        buttonObject.AddComponent<XunjuuButtonMotion>();
         button.targetGraphic = image;
         button.onClick.AddListener(action);
 
@@ -1159,19 +1260,27 @@ public class DyanatroGameDirector : MonoBehaviour
         label.raycastTarget = false;
         Text arrow = CreateLabel(buttonObject.transform, ">", 25, new Vector2(132f, 0f), new Vector2(28f, 50f), accent);
         arrow.raycastTarget = false;
+        label.fontStyle = FontStyle.Bold;
+        ApplyMenuButtonPalette(button, accent);
         return button;
     }
 
     Color GetTextileButtonAccent(string text)
     {
-        if (text == "Continuar" || text == "Reintentar" || text.StartsWith("Saltar"))
-            return MenuYellow;
+        if (text == "Continuar" || text == "Reintentar")
+            return MenuGreen;
         if (text == "Ludoteca")
             return MenuMagenta;
+        if (text == "Controles")
+            return MenuBlue;
+        if (text == "Ajustes")
+            return MenuViolet;
         if (text == "Reiniciar")
+            return MenuYellow;
+        if (text == "Salir del juego")
             return MenuGrana;
-        if (text == "Menu inicial")
-            return MenuGreen;
+        if (text == "Menu inicial" || text == "Menú inicial")
+            return MenuTeal;
         return MenuYellow;
     }
 
@@ -1247,7 +1356,7 @@ public class DyanatroGameDirector : MonoBehaviour
         introVideoSpanishText.text = "ESPAÑOL   " + introVideoSpanishLines[index];
         // Preserve the original language source without presenting outdated quest
         // counts or newly written Spanish as a verified Mazahua translation.
-        introVideoMazahuaText.text = index > 0 && index < 5
+        introVideoMazahuaText.text = index == 1
             ? "MAZAHUA · TEXTO ORIGINAL   " + introVideoMazahuaLines[index]
             : "MAZAHUA   Traducción del nuevo relato pendiente de revisión lingüística.";
     }
@@ -1268,13 +1377,13 @@ public class DyanatroGameDirector : MonoBehaviour
         panelRect.anchorMin = new Vector2(1f, 1f);
         panelRect.anchorMax = new Vector2(1f, 1f);
         panelRect.pivot = new Vector2(1f, 1f);
-        panelRect.anchoredPosition = controlsSidebarPosition;
+        panelRect.anchoredPosition = new Vector2(Mathf.Min(-22f,controlsSidebarPosition.x),Mathf.Min(-205f,controlsSidebarPosition.y));
         Vector2 effectiveSize = new Vector2(
             410f,
-            520f);
+            690f);
         panelRect.sizeDelta = effectiveSize;
 
-        Image panelImage = controlsSidebar.AddComponent<Image>();
+        Image panelImage = controlsSidebar.AddComponent<XunjuuRoundedImage>();
         panelImage.color = new Color(0.025f, 0.045f, 0.05f, 0.96f);
         panelImage.raycastTarget = false;
         Outline panelOutline = controlsSidebar.AddComponent<Outline>();
@@ -1296,7 +1405,7 @@ public class DyanatroGameDirector : MonoBehaviour
         Text title = CreateLabel(
             controlsSidebar.transform,
             "CONTROLES",
-            20,
+            23,
             new Vector2(0f, effectiveSize.y * 0.5f - 27f),
             new Vector2(effectiveSize.x - 42f, 34f),
             new Color(1f, 0.82f, 0.3f, 1f));
@@ -1305,13 +1414,13 @@ public class DyanatroGameDirector : MonoBehaviour
         float ruleY = effectiveSize.y * 0.5f - 52f;
         CreateMenuRule(controlsSidebar.transform, new Vector2(0f, ruleY), new Vector2(effectiveSize.x - 44f, 2f), new Color(MenuCream.r, MenuCream.g, MenuCream.b, 0.38f));
 
-        string[] leftKeys = { "W", "S", "A", "D", "ESPACIO" };
-        string[] leftActions = { "Avanzar", "Retroceder", "Izquierda", "Derecha", "Saltar" };
-        string[] rightKeys = { "CLIC IZQ.", "F", "E", "I", "ESC" };
-        string[] rightActions = { "Atacar", "Macuahuitl", "Habilidad especial", "Inventario", "Pausa" };
-        float firstRowY = effectiveSize.y * 0.5f - 82f;
-        CreateControlColumn(controlsSidebar.transform, leftKeys, leftActions, -125f, 57f, firstRowY);
-        CreateControlColumn(controlsSidebar.transform, rightKeys, rightActions, -125f, 57f, firstRowY - 215f);
+        string[] leftKeys = { "WASD", "ESPACIO", "CLIC IZQ.", "F", "E" };
+        string[] leftActions = { "Moverse", "Saltar", "Golpear", "Macuahuitl", "Giro protector" };
+        string[] rightKeys = { "C", "G", "I", "H", "ESC" };
+        string[] rightActions = { "Registrar fauna", "Recolectar plantas", "Abrir morral", "Usar infusión", "Pausa" };
+        float firstRowY = effectiveSize.y * 0.5f - 100f;
+        CreateControlColumn(controlsSidebar.transform, leftKeys, leftActions, -110f, 82f, firstRowY);
+        CreateControlColumn(controlsSidebar.transform, rightKeys, rightActions, -110f, 82f, firstRowY - 280f);
         controlsSidebar.SetActive(false);
         var help = new GameObject("Boton_Ayuda_Controles", typeof(RectTransform), typeof(Image), typeof(Button));
         help.transform.SetParent(parent, false);
@@ -1328,24 +1437,9 @@ public class DyanatroGameDirector : MonoBehaviour
     {
         for (int i = 0; i < keys.Length; i++)
         {
-            float y = firstRowY - i * 43f;
-            GameObject keycap = new GameObject("Tecla_" + keys[i], typeof(RectTransform), typeof(Image));
-            keycap.transform.SetParent(parent, false);
-            RectTransform keyRect = keycap.GetComponent<RectTransform>();
-            float keyWidth = keys[i].Length > 4 ? 84f : 52f;
-            keyRect.sizeDelta = new Vector2(keyWidth, 28f);
-            keyRect.anchoredPosition = new Vector2(keyX, y);
-            Image keyImage = keycap.GetComponent<Image>();
-            keyImage.color = new Color(0.08f, 0.18f, 0.20f, 1f);
-            keyImage.raycastTarget = false;
-            Outline keyOutline = keycap.AddComponent<Outline>();
-            keyOutline.effectColor = new Color(0.35f, 0.55f, 0.48f, 0.8f);
-            keyOutline.effectDistance = new Vector2(1f, -1f);
-
-            Text key = CreateLabel(keycap.transform, keys[i], 17, Vector2.zero, new Vector2(keyWidth - 4f, 26f), Color.white);
-            key.fontStyle = FontStyle.Bold;
-            Text action = CreateLabel(parent, actions[i], 21, new Vector2(actionX, y), new Vector2(224f, 32f), new Color(.91f, .94f, .91f));
-            action.alignment = TextAnchor.MiddleLeft;
+            float y = firstRowY - i * 56f;
+            XunjuuControlGlyphs.Add(parent,keys[i],new Vector2(keyX,y));
+            XunjuuInterfaceTheme.Label(parent,"Accion_Control",actions[i],21,new Vector2(212,44),new Vector2(actionX,y),XunjuuInterfaceTheme.Paper,TextAnchor.MiddleLeft);
         }
     }
 
@@ -1388,12 +1482,17 @@ public class DyanatroGameDirector : MonoBehaviour
 
     void BeginGame()
     {
-        if (inPrologue) return;
+        if (inPrologue||gameStarted) return;
+        if(ludotecaBrowser!=null&&ludotecaBrowser.IsOpen)ludotecaBrowser.Close();
+        if(IsSettingsOpen)presentationSettings.Close();
+        if(EventSystem.current!=null)EventSystem.current.SetSelectedGameObject(null);
+        XunjuuSceneTransition.ShowIntro(SkipIntroVideo);
         skipPrologueRequested = false;
         skipIntroRequested = false;
-        SetGameplayMusicVolume();
         mainMenuPanel.SetActive(false);
         inPrologue = true;
+        gameStarted=true;
+        SynchronizeMusicPlayback();
         hudRoot.SetActive(false);
         StartCoroutine(IntroVideoThenPrologue());
     }
@@ -1437,8 +1536,9 @@ public class DyanatroGameDirector : MonoBehaviour
     }
 
     public float MenuMusicVolume => menuMusicVolume;
-    public float GameplayMusicVolume => menuMusicVolume * (1f - gameplayMusicReduction);
+    public float GameplayMusicVolume => menuMusicVolume * (1f - gameplayMusicReduction) * XunjuuPresentationPreferences.MusicVolume;
     public float CurrentMusicVolume => musicSource != null ? musicSource.volume : 0f;
+    public bool IsBackgroundMusicPlaying => musicSource != null && musicSource.isPlaying;
 
     IEnumerator IntroVideoThenPrologue()
     {
@@ -1452,16 +1552,29 @@ public class DyanatroGameDirector : MonoBehaviour
     IEnumerator PlayIntroVideo()
     {
         if (introVideoPanel == null || introVideoImage == null)
+        {
+            XunjuuSceneTransition.Dismiss();
             yield break;
+        }
 
         string videoPath = Path.Combine(Application.streamingAssetsPath, "IntroPrologoMazahua.mp4");
         if (!File.Exists(videoPath))
+        {
+            XunjuuSceneTransition.Dismiss();
             yield break;
+        }
 
         skipIntroRequested = false;
         inPrologue = true;
         introVideoPanel.SetActive(true);
         introVideoPanel.transform.SetAsLastSibling();
+        if(introLoadingPanel==null)
+        {
+            introLoadingPanel=XunjuuInterfaceTheme.Panel(introVideoPanel.transform,"Preparando_Introduccion",new Vector2(780,170),Vector2.zero,XunjuuInterfaceTheme.Ink);
+            XunjuuInterfaceTheme.Label(introLoadingPanel.transform,"Titulo","PREPARANDO EL RECORRIDO",28,new Vector2(700,50),new Vector2(0,30),XunjuuInterfaceTheme.Paper);
+            XunjuuInterfaceTheme.Label(introLoadingPanel.transform,"Ayuda","Cargando la introducción…\nPuedes usar «Saltar intro» para continuar.",20,new Vector2(700,70),new Vector2(0,-35),XunjuuInterfaceTheme.Muted);
+        }
+        introLoadingPanel.SetActive(true);introLoadingPanel.transform.SetAsLastSibling();
         if (introVideoTranslationOverlay != null)
             introVideoTranslationOverlay.SetActive(true);
         if (introSkipButton != null)
@@ -1469,6 +1582,8 @@ public class DyanatroGameDirector : MonoBehaviour
             introSkipButton.interactable = true;
             introSkipButton.transform.SetAsLastSibling();
         }
+        // Permitir que el estado de carga se dibuje antes de iniciar el decodificador.
+        yield return null;
 
         if (introVideoTexture == null)
             introVideoTexture = new RenderTexture(1280, 720, 0, RenderTextureFormat.ARGB32);
@@ -1491,9 +1606,10 @@ public class DyanatroGameDirector : MonoBehaviour
         introVideoPlayer.Prepare();
 
         float prepareTimer = 0f;
-        while (!introVideoPlayer.isPrepared && prepareTimer < 4f && !skipIntroRequested)
+        while (!introVideoPlayer.isPrepared && prepareTimer < 2.25f && !skipIntroRequested)
         {
-            prepareTimer += Time.deltaTime;
+            prepareTimer += Time.unscaledDeltaTime;
+            XunjuuSceneTransition.UpdateIntroProgress(Mathf.Lerp(0.12f, 0.78f, prepareTimer / 2.25f), "Preparando la introducción…");
             yield return null;
         }
 
@@ -1501,18 +1617,26 @@ public class DyanatroGameDirector : MonoBehaviour
         {
             UpdateIntroVideoTranslation(0);
             introVideoPlayer.Play();
+            introLoadingPanel.SetActive(false);
             yield return null;
+            XunjuuSceneTransition.Dismiss();
+            double previousVideoTime=introVideoPlayer.time;float stalled=0f;
             while (introVideoPlayer.isPlaying && !skipIntroRequested)
             {
                 UpdateIntroVideoTranslation();
+                if(Mathf.Abs((float)(introVideoPlayer.time-previousVideoTime))>.02f){previousVideoTime=introVideoPlayer.time;stalled=0;}
+                else stalled+=Time.unscaledDeltaTime;
+                if(stalled>6f){Debug.LogWarning("La introducción no avanzó; se continúa con el prólogo sin retirar el video del proyecto.");break;}
                 yield return null;
             }
         }
 
-        introVideoPlayer.Stop();
+        if (introVideoPlayer != null) introVideoPlayer.Stop();
+        if (introLoadingPanel != null) introLoadingPanel.SetActive(false);
         introVideoPanel.SetActive(false);
         inPrologue = false;
         skipIntroRequested = false;
+        XunjuuSceneTransition.Dismiss();
     }
 
     IEnumerator PrologueTimeline()
@@ -1541,77 +1665,14 @@ public class DyanatroGameDirector : MonoBehaviour
         mazahuaBody.fontStyle = FontStyle.Bold;
         ApplyReadableTextStyle(mazahuaBody, new Color(1f, 0.9f, 0.48f), 2.2f);
 
-        string[,] beats =
+        // Relato jugable: no presenta la ficción como una tradición histórica.
+        string[,] beats=new string[,]
         {
-            {
-                "I. EL PUEBLO",
-                "Español: San Felipe del Progreso era un pueblo mazahua.",
-                "Mazahua: San Felipe del Progreso mi na jñiñi jñatjo."
-            },
-            {
-                "II. LA MILPA",
-                "Español: Alimentos: maiz, frijol, haba, calabaza, papa, trigo y hortalizas.",
-                "Mazahua: Jñona: maiz, frijol, haba, calabaza, papa, trigo, hortalizas."
-            },
-            {
-                "III. MATEO JNATR'O",
-                "Español: Mateo Jnatr'o es P'antreje Jnatr'o, el cazador que habla.",
-                "Mazahua: Mateo Jnatr'o: P'antreje Jnatr'o, mepjanteje ko na jñaa."
-            },
-            {
-                "IV. LA LLUVIA",
-                "Español: Lluvia, milpa y alimento en peligro.",
-                "Mazahua: Dyeb'e, milpa, jñona: dya joo."
-            },
-            {
-                "V. LA PROFECIA",
-                "Español: Mateo debe ser el cazador que habla y proteger al pueblo.",
-                "Mazahua: Mateo: P'antreje Jnatr'o; tsasú na jñiñi."
-            },
-            {
-                "VI. EL RITUAL",
-                "Español: Recoge las flores y registra la fauna sin arma.",
-                "Traducción mazahua de esta etapa pendiente de revisión."
-            },
-            {
-                "VII. LAS CINCO FLORES",
-                "Español: Recoge cinco flores. Protege al pueblo.",
-                "Mazahua: Tsansa tsicha ndájná. Tsasú na jñiñi."
-            },
-            {
-                "VIII. EL MACUAHUITL",
-                "Español: El Macuahuitl se entrega después de registrar los seis animales.",
-                "Traducción mazahua de esta etapa pendiente de revisión."
-            },
-            {
-                "IX. LA FAUNA ALTERADA",
-                "Español: La fauna del bosque está desorientada; Mateo debe registrarla sin hacerle daño.",
-                "Texto mazahua pendiente de validación comunitaria."
-            },
-            {
-                "X. LAS SOMBRAS",
-                "Español: Ocho Dyanatr'o. Orbitasword.",
-                "Mazahua: Jñincho Dyanatr'o. Orbitasword."
-            },
-            {
-                "XI. EL GRAN DYANATR'O",
-                "Español: Gran Dyanatr'o. Macuahuitl y Orbitasword.",
-                "Mazahua: Gran Dyanatr'o. Macuahuitl, Orbitasword."
-            },
-            {
-                "XII. LA OFRENDA",
-                "Español: Cinco flores: Otontecuhtli. Pueblo protegido.",
-                "Mazahua: Tsicha ndájná: Otontecuhtli. Jñiñi tsasú."
-            }
-        };
-
-        // Keep the legacy story table above as archival content. The playable
-        // introduction establishes the premise without granting/spoiling rewards.
-        beats=new string[,]
-        {
-            {"XUNJÚU · EL CAMINO DE MATEO","Mateo conoce los caminos de su comunidad, pero una presencia extraña está alterando la milpa y desorientando a los animales.","Relato de ficción del juego. No representa una ceremonia ni una tradición histórica."},
-            {"ANTES DE EMPUÑAR UN ARMA","Antes de salir, Mateo practica en el claro: caminar, saltar, defenderse con las manos y abrir su morral. El viaje empieza sin arma.","La práctica no entrega recompensas ni desbloquea ataques especiales."},
-            {"LO QUE GUARDAN LAS FLORES","Cinco flores conservan palabras y recuerdos del lugar. Aprende a moverte; después recógelas para ganarte la confianza de tu comunidad.","El vocabulario mazahua existente se conserva; los nuevos diálogos están en español hasta contar con revisión lingüística."}
+            {"DYANATR’O · MEMORIA Y TERRITORIO","En los caminos de la comunidad se van perdiendo palabras y recuerdos. DYANATR’O inicia un viaje para reunirlos, mientras unas sombras desorientan a los animales y alteran la milpa.","Ficción inspirada en el territorio. Las sombras no son seres atribuidos a la tradición mazahua."},
+            {"LAS FLORES QUE GUARDAN PALABRAS","Practica primero en el claro. Después reúne cinco flores de memoria: cada una guarda una palabra que podrás conservar en tu morral.","Las flores de memoria son objetos fantásticos inspirados en motivos textiles, no especies medicinales."},
+            {"RECONOCER ANTES DE ACTUAR","Registra seis animales sin hacerles daño. Sus fichas en la ludoteca te ayudarán a reconocer la vida del territorio; solo después comenzará la misión del huerto.","Capturar significa registrar dentro de la ficción del juego; no promueve capturar fauna real."},
+            {"EL SABER TAMBIÉN CUIDA","En el huerto cultivado, distingue la manzanilla de la hierbabuena. Consulta sus fichas y prepara una infusión antes de enfrentar las sombras. Guárdala si tu salud está completa.","La receta y la recuperación de vida son mecánicas ficticias, no indicaciones médicas."},
+            {"VOLVER PARA COMPARTIR","Superar las sombras abre el camino de regreso. Las palabras, los animales y las plantas reunidos en la ludoteca serán tu memoria del viaje: no basta encontrarlos, hay que seguir aprendiendo.","El vocabulario y los contenidos culturales requieren revisión comunitaria; esta aventura no sustituye la transmisión de la lengua."}
         };
         for (int i = 0; i < beats.GetLength(0); i++)
         {
@@ -1622,7 +1683,7 @@ public class DyanatroGameDirector : MonoBehaviour
             float elapsed = 0f;
             while (elapsed < prologueBeatDuration && !skipPrologueRequested)
             {
-                elapsed += Time.deltaTime;
+                elapsed += Time.unscaledDeltaTime;
                 yield return null;
             }
 
@@ -1638,6 +1699,7 @@ public class DyanatroGameDirector : MonoBehaviour
 
     void FinishPrologue()
     {
+        Time.timeScale=1f;
         if (prologuePanel != null)
             prologuePanel.SetActive(false);
         if (prologueSkipButton != null)
@@ -1656,6 +1718,7 @@ public class DyanatroGameDirector : MonoBehaviour
         var opening=GetComponent<XunjuuOpeningJourney>()??gameObject.AddComponent<XunjuuOpeningJourney>();
         opening.Begin(player,hudRoot.transform);
         if(objectiveText!=null)objectiveText.gameObject.SetActive(false);
+        SynchronizeMusicPlayback();
     }
 
     public bool IsOpeningTutorialActive => GetComponent<XunjuuOpeningJourney>()?.TutorialActive==true;
@@ -1664,7 +1727,7 @@ public class DyanatroGameDirector : MonoBehaviour
 
     public void OnSwordCollected()
     {
-        ShowMissionFeedback("RECOMPENSA OBTENIDA\nMazahua: Mateo pesi Macuahuitl.\nEspañol: Mateo tiene el Macuahuitl.", true);
+        // La transición de preparación anuncia el arma una sola vez.
         if (objectiveText != null && levelOneCompleted)
             objectiveText.text = GetMissionCompletedHudText();
     }
@@ -1676,10 +1739,7 @@ public class DyanatroGameDirector : MonoBehaviour
             return;
 
         mazahuaWordsCollected = collectedMazahuaWords.Count;
-        string storyText = string.IsNullOrWhiteSpace(storyMazahua) && string.IsNullOrWhiteSpace(storySpanish)
-            ? $"Mazahua: {word}.\nEspañol: {meaning}."
-            : $"{storyMazahua}\n{storySpanish}\nPalabra: {word} - {meaning}";
-        ShowMissionFeedback(storyText);
+        XunjuuMissionNotice.For(this).Show("palabra-"+word,word,meaning,false,3.8f);
 
         if (mazahuaWordsCollected >= mazahuaWordGoal)
             CompleteLevelOne();
@@ -1707,10 +1767,7 @@ public class DyanatroGameDirector : MonoBehaviour
             objectiveText.gameObject.SetActive(false);
         }
 
-        ShowMissionFeedback(
-            "FLORES COMPLETADAS\n"
-            + "Captura seis animales con C.",
-            true);
+        XunjuuMissionNotice.For(this).Show("flores-completas","Jñaa","Cinco flores de memoria, cinco palabras.\nAcércate a la fauna sin atacarla y registra seis especies.");
 
         if (levelTwoMission != null)
             levelTwoMission.StartMission();
@@ -1739,29 +1796,30 @@ public class DyanatroGameDirector : MonoBehaviour
 
     string GetMissionIntroText()
     {
-        return $"Mazahua: Tsansa tsicha ndájná ({mazahuaWordsCollected}/{mazahuaWordGoal}).\nEspañol: Recoge cinco flores ({mazahuaWordsCollected}/{mazahuaWordGoal}).";
+        if(objectiveText!=null)objectiveText.GetComponentInParent<XunjuuQuestCard>()?.SetProgress(mazahuaWordsCollected,mazahuaWordGoal);
+        return $"Flores de memoria: {mazahuaWordsCollected} de {mazahuaWordGoal}.\nAcércate para conservar sus palabras en el morral.";
     }
 
     string GetMissionProgressText()
     {
-        return $"Mazahua: Tsansa tsicha ndájná ({mazahuaWordsCollected}/{mazahuaWordGoal}).\nEspañol: Recoge cinco flores ({mazahuaWordsCollected}/{mazahuaWordGoal}).";
+        return GetMissionIntroText();
     }
 
     string GetMissionCompletedHudText()
     {
-        return "Captura y registra seis especies con C.\nRecibirás el Macuahuitl al completar las capturas.";
+        return "Registra seis especies con C.\nDespués aprenderás a preparar tu morral en el huerto.";
     }
 
     void ShowMissionFeedback(string message, bool completed = false)
     {
-        if (missionFeedbackText == null)
-            return;
-
-        StopCoroutine(nameof(HideMissionFeedbackAfterDelay));
-        missionFeedbackText.text = message;
-        missionFeedbackCompletedVisible = completed;
-        ApplyMissionFeedbackStyle(completed);
-        StartCoroutine(nameof(HideMissionFeedbackAfterDelay));
+        string mazahua="Jñaa",spanish="";
+        foreach(string line in message.Split('\n'))
+        {
+            if(line.StartsWith("Mazahua:"))mazahua=line.Substring(8).Trim();
+            else if(line.StartsWith("Español:"))spanish=line.Substring(8).Trim();
+        }
+        if(string.IsNullOrEmpty(spanish))spanish=message;
+        XunjuuMissionNotice.For(this).Show("director-"+spanish,mazahua,spanish,completed,completed?5f:3.8f);
     }
 
     void ApplyMissionFeedbackStyle(bool completed)
@@ -2206,20 +2264,49 @@ public class DyanatroGameDirector : MonoBehaviour
         pausePanel.SetActive(value);
         Time.timeScale = value ? 0f : 1f;
         SetPlayerControl(!value);
+        if(!value&&pauseControlsPanel!=null)pauseControlsPanel.SetActive(false);
+        if(!value&&quitDialog!=null)quitDialog.SetActive(false);
+        if(!value&&IsSettingsOpen)presentationSettings.Close();
+        SynchronizeMusicPlayback();
+    }
+
+    void TogglePauseControls()
+    {
+        if(pauseControlsPanel==null)
+        {
+            pauseControlsPanel=XunjuuModalStyle.Card(pausePanel.transform,"Controles_En_Pausa",new Vector2(480,770),new Vector2(-530,0));
+            XunjuuInterfaceTheme.Label(pauseControlsPanel.transform,"Titulo","CONTROLES DEL RECORRIDO",23,new Vector2(430,48),new Vector2(0,330),XunjuuInterfaceTheme.Gold);
+            CreateControlColumn(pauseControlsPanel.transform,new[]{"WASD","ESPACIO","CLIC IZQ.","F","E"},new[]{"Moverse","Saltar","Golpe básico","Macuahuitl","Giro protector"},-140,82,253);
+            CreateControlColumn(pauseControlsPanel.transform,new[]{"C","G","I","H","ESC"},new[]{"Registrar fauna","Recolectar plantas","Abrir morral","Usar infusión","Pausa / volver"},-140,82,-27);
+            XunjuuInterfaceTheme.Label(pauseControlsPanel.transform,"Nota","Las acciones se habilitan al avanzar.\nESC cierra esta ayuda sin reanudar.",17,new Vector2(430,60),new Vector2(0,-327),XunjuuInterfaceTheme.Muted);
+        }
+        else pauseControlsPanel.SetActive(!pauseControlsPanel.activeSelf);
     }
 
     IEnumerator ShowDeathScreenAfterDelay()
     {
+        // Cerrar primero los modales que restauran su propia escala de tiempo.
+        if (ludotecaBrowser != null && ludotecaBrowser.IsOpen) ludotecaBrowser.Close();
+        if (presentationSettings != null && presentationSettings.IsOpen) presentationSettings.Close();
+        if (IsQuitConfirmationVisible) CancelConfirmation();
+        if (IsInventoryOpen) player.GetComponent<XunjuuInventoryUI>().SetVisible(false);
         if (pausePanel != null)
             pausePanel.SetActive(false);
+        if (pauseControlsPanel != null) pauseControlsPanel.SetActive(false);
+        if (controlsSidebar != null) controlsSidebar.SetActive(false);
+        if (hudRoot != null) hudRoot.SetActive(false);
         if (introVideoPanel != null)
             introVideoPanel.SetActive(false);
 
+        Time.timeScale = 1f;
         yield return new WaitForSecondsRealtime(1.35f);
         SetPlayerControl(false);
 
         if (deathPanel != null)
+        {
+            deathPanel.transform.SetAsLastSibling();
             deathPanel.SetActive(true);
+        }
 
         if (missionFeedbackText != null)
             missionFeedbackText.text = string.Empty;
@@ -2230,17 +2317,22 @@ public class DyanatroGameDirector : MonoBehaviour
 
     void RestartScene()
     {
+        ReloadScene(true);
+    }
+
+    void ReloadScene(bool playAgain)
+    {
+        if (sceneTransitionPending) return;
+        sceneTransitionPending = true;
+        restartIntoGame = playAgain;
         Time.timeScale = 1f;
         Scene activeScene = SceneManager.GetActiveScene();
-        if (activeScene.buildIndex >= 0)
-            SceneManager.LoadScene(activeScene.buildIndex);
-        else
-            SceneManager.LoadScene(activeScene.name);
+        XunjuuSceneTransition.LoadScene(activeScene.buildIndex, activeScene.name);
     }
 
     void ReturnToMainMenu()
     {
-        RestartScene();
+        ReloadScene(false);
     }
 
     // ========================================================================
@@ -2249,6 +2341,7 @@ public class DyanatroGameDirector : MonoBehaviour
     // ========================================================================
     public void OpenLudoteca()
     {
+        if(inPrologue)return;
         if (ludotecaBrowser != null)
             ludotecaBrowser.Open();
     }
@@ -2285,6 +2378,7 @@ public class DyanatroGameDirector : MonoBehaviour
 
     void OnDestroy()
     {
+        XunjuuPresentationPreferences.Changed -= ApplyPresentationPreferences;
         if (levelTwoMission != null)
             levelTwoMission.MissionCompleted -= HandleLevelCompletedForLudoteca;
         if (runtimeGuideArrowSprite != null)
@@ -2292,6 +2386,48 @@ public class DyanatroGameDirector : MonoBehaviour
             Destroy(runtimeGuideArrowSprite.texture);
             Destroy(runtimeGuideArrowSprite);
         }
+    }
+
+    private GameObject quitDialog;
+    private Text confirmationTitle,confirmationDescription;
+    private Button confirmationButton;
+    private UnityEngine.Events.UnityAction confirmationAction;
+    void ShowQuitConfirmation()
+    {
+        ShowConfirmation("¿SALIR DEL JUEGO?","Se cerrará el juego. El avance de esta partida\nno se guarda; tus fichas descubiertas se conservan.","SALIR",QuitGame);
+    }
+
+    void ShowSessionConfirmation(bool restart)
+    {
+        ShowConfirmation(restart?"¿REINICIAR EL RECORRIDO?":"¿VOLVER AL INICIO?",
+            "Se perderán los objetos y el avance de esta partida.\nTus fichas descubiertas y tus ajustes se conservan.",
+            restart?"REINICIAR":"VOLVER AL INICIO",restart?(UnityEngine.Events.UnityAction)RestartScene:ReturnToMainMenu);
+    }
+
+    void CancelConfirmation() { quitDialog.SetActive(false);confirmationAction=null; }
+
+    void ShowConfirmation(string title,string message,string accept,UnityEngine.Events.UnityAction action)
+    {
+        if(quitDialog==null)
+        {
+            quitDialog=XunjuuInterfaceTheme.Panel(pausePanel.transform,"Confirmar_Salida",Vector2.zero,Vector2.zero,new Color(.01f,.025f,.035f,.76f));
+            var rect=quitDialog.GetComponent<RectTransform>();rect.anchorMin=Vector2.zero;rect.anchorMax=Vector2.one;rect.offsetMin=rect.offsetMax=Vector2.zero;
+            quitDialog.GetComponent<Image>().raycastTarget=true;
+            var box=XunjuuModalStyle.Card(quitDialog.transform,"Dialogo_Salida",new Vector2(860,480),Vector2.zero);
+            var symbol=XunjuuInterfaceTheme.Panel(box.transform,"Aviso_Icono",new Vector2(60,60),new Vector2(-341,139),new Color(.32f,.22f,.09f));
+            XunjuuInterfaceTheme.Label(symbol.transform,"Simbolo","!",33,new Vector2(50,50),Vector2.zero,XunjuuInterfaceTheme.Gold).fontStyle=FontStyle.Bold;
+            confirmationTitle=XunjuuInterfaceTheme.Label(box.transform,"Titulo","",30,new Vector2(620,80),new Vector2(26,139),XunjuuInterfaceTheme.Paper,TextAnchor.MiddleLeft);
+            confirmationTitle.fontStyle=FontStyle.Bold;
+            var notice=XunjuuInterfaceTheme.Panel(box.transform,"Detalle_Accion",new Vector2(752,112),new Vector2(0,24),XunjuuModalStyle.Inset);
+            confirmationDescription=XunjuuInterfaceTheme.Label(notice.transform,"Aviso","",22,new Vector2(708,96),Vector2.zero,XunjuuModalStyle.Quiet);
+            XunjuuModalStyle.Rule(box.transform,-61,752);
+            var cancel=XunjuuModalStyle.Action(box.transform,"Cancelar_Salida","Seguir jugando",new Vector2(320,58),new Vector2(-170,-139),CancelConfirmation,XunjuuModalStyle.Accent);
+            confirmationButton=XunjuuModalStyle.Action(box.transform,"Confirmar_Salir","",new Vector2(320,58),new Vector2(170,-139),()=>{var chosen=confirmationAction;CancelConfirmation();chosen?.Invoke();},new Color(.79f,.38f,.34f));
+            XunjuuInterfaceTheme.Label(box.transform,"Ayuda","ESC  cancelar    ·    ENTER  aceptar la opción seleccionada",15,new Vector2(752,28),new Vector2(0,-199),XunjuuModalStyle.Quiet);
+            XunjuuMenuNavigation.Configure(quitDialog,this,30,cancel,confirmationButton);
+        }
+        confirmationTitle.text=title;confirmationDescription.text=message;confirmationButton.GetComponentInChildren<Text>().text=accept;confirmationAction=action;
+        quitDialog.SetActive(true);quitDialog.transform.SetAsLastSibling();
     }
 
     void QuitGame()
@@ -2321,7 +2457,7 @@ public class DyanatroGameDirector : MonoBehaviour
             healthFill.fillAmount = target;
             healthFillInitialized = true;
         }
-        else if (Time.deltaTime > 0f)
+        else if (Time.timeScale > 0f && Time.deltaTime > 0f)
         {
             if ((target - healthFill.fillAmount) * healthFillVelocity < 0f) healthFillVelocity = 0f;
             healthFill.fillAmount = Mathf.SmoothDamp(healthFill.fillAmount, target,
@@ -2329,10 +2465,10 @@ public class DyanatroGameDirector : MonoBehaviour
         }
     }
 
-    void SpawnTallGrass()
+    IEnumerator SpawnTallGrass()
     {
         if (tallGrassPatchCount <= 0)
-            return;
+            yield break;
 
         GameObject existing = GameObject.Find("PastoAlto_Dyanatro");
         if (existing != null)
@@ -2340,7 +2476,7 @@ public class DyanatroGameDirector : MonoBehaviour
 
         Sprite grassSprite = GetTallGrassSprite();
         if (grassSprite == null)
-            return;
+            yield break;
 
         GameObject root = new GameObject("PastoAlto_Dyanatro");
         Vector3 center = playerTransform != null ? playerTransform.position : Vector3.zero;
@@ -2350,6 +2486,11 @@ public class DyanatroGameDirector : MonoBehaviour
         while (spawned < tallGrassPatchCount && attempts < tallGrassPatchCount * 10)
         {
             attempts++;
+            if (attempts % 48 == 0)
+            {
+                XunjuuSceneTransition.SetStartupStage(Mathf.Lerp(0.49f, 0.62f, (float)spawned / tallGrassPatchCount), "Preparando la vegetación " + spawned + " / " + tallGrassPatchCount);
+                yield return null;
+            }
             Vector2 circle = Random.insideUnitCircle * tallGrassRadius;
             Vector3 candidate = center + new Vector3(circle.x, 0f, circle.y);
 
@@ -3434,18 +3575,27 @@ public class DyanatroGameDirector : MonoBehaviour
 
     void SpawnGroundedForest(bool forceRegenerate)
     {
+        IEnumerator routine = SpawnGroundedForestRoutine(forceRegenerate);
+        if (Application.isPlaying)
+            StartCoroutine(routine);
+        else
+            while (routine.MoveNext()) { }
+    }
+
+    IEnumerator SpawnGroundedForestRoutine(bool forceRegenerate)
+    {
         if (treePrefab == null && (additionalTreePrefabs == null || additionalTreePrefabs.Length == 0))
-            return;
+            yield break;
 
         Terrain[] terrains = FindObjectsByType<Terrain>(FindObjectsSortMode.None);
         if (terrains.Length == 0)
-            return;
+            yield break;
 
         GameObject oldRoot = GameObject.Find("Bosque_Dyanatro_Generado");
         if (oldRoot != null && oldRoot.transform.childCount > 0 && !forceRegenerate)
         {
             PrepareExistingTrees(oldRoot);
-            return;
+            yield break;
         }
         if (oldRoot != null)
             DestroySceneObject(oldRoot);
@@ -3483,6 +3633,12 @@ public class DyanatroGameDirector : MonoBehaviour
             while (spawnedOnTerrain < targetCount && attempts < targetCount * 180)
             {
                 attempts++;
+                if (attempts % 48 == 0)
+                {
+                    float total = Mathf.Max(1f, terrains.Length * targetCount);
+                    XunjuuSceneTransition.SetStartupStage(Mathf.Lerp(0.16f, 0.32f, globalTreeIndex / total), "Cuidando el bosque " + (globalTreeIndex + 1) + " / " + Mathf.CeilToInt(total));
+                    yield return null;
+                }
                 float angle = Random.Range(0f, 360f) * Mathf.Deg2Rad;
                 float radius = maximumRadius * Mathf.Sqrt(Random.value);
                 Vector3 candidate = forestCenter + new Vector3(Mathf.Cos(angle) * radius, 0f, Mathf.Sin(angle) * radius);
@@ -3517,6 +3673,8 @@ public class DyanatroGameDirector : MonoBehaviour
                 treePositions.Add(tree.transform.position);
                 spawnedOnTerrain++;
                 globalTreeIndex++;
+                if (spawnedOnTerrain % 12 == 0)
+                    yield return null;
             }
 
             if (spawnedOnTerrain < targetCount)

@@ -60,7 +60,7 @@ public static class XunjuuTwoLevelRuntimeValidation
     private static void HandlePlayModeChange(PlayModeStateChange state)
     {
         if (state == PlayModeStateChange.EnteredPlayMode && SessionState.GetBool(PendingKey, false))
-            EditorApplication.delayCall += RunValidation;
+            RunValidation();
     }
 
     private static async void RunValidation()
@@ -70,6 +70,7 @@ public static class XunjuuTwoLevelRuntimeValidation
 
         validationRunning = true;
         bool passed = true;
+        var plantSaved=XunjuuMedicinalPlantCatalog.Entries.ToDictionary(e=>e.Id,e=>PlayerPrefs.HasKey(XunjuuMedicinalPlantCatalog.SavePrefix+e.Id)?PlayerPrefs.GetInt(XunjuuMedicinalPlantCatalog.SavePrefix+e.Id):-1);
         try
         {
             Time.timeScale = 1f;
@@ -82,8 +83,8 @@ public static class XunjuuTwoLevelRuntimeValidation
 
             if (player == null || director == null || levelTwo == null || flowers.Length != 5)
                 throw new InvalidOperationException("Faltan Player, Director, mision beta o las cinco flores.");
-            if (Mathf.Abs(director.CurrentMusicVolume - director.MenuMusicVolume) > 0.03f)
-                throw new InvalidOperationException("La musica no inicio con el volumen fuerte del menu.");
+            if (director.IsBackgroundMusicPlaying)
+                throw new InvalidOperationException("La musica no debe reproducirse antes de iniciar el recorrido.");
 
             // ACCION: comprobar por separado los dos botones de salto.
             director.BeginGameForValidation();
@@ -103,20 +104,24 @@ public static class XunjuuTwoLevelRuntimeValidation
             director.SkipTimelineForValidation();
             await Task.Delay(350);
             director.GetComponent<XunjuuOpeningJourney>()?.FinishTutorial();
-            await Task.Delay(100);
+            await Task.Delay(1100);
             if (director.IsInPrologue || director.IsTimelinePrologueVisible)
                 throw new InvalidOperationException("El segundo boton no salto el prologo de texto.");
-            if (Mathf.Abs(director.CurrentMusicVolume - director.GameplayMusicVolume) > 0.03f
-                || Mathf.Abs(director.GameplayMusicVolume / director.MenuMusicVolume - 0.45f) > 0.01f)
-                throw new InvalidOperationException("La musica no bajo 55 por ciento al comenzar la partida.");
-            if (!director.IsControlsSidebarVisible)
-                throw new InvalidOperationException("La guia compacta de controles no aparecio al iniciar la partida.");
+            if (!director.IsBackgroundMusicPlaying || Mathf.Abs(director.CurrentMusicVolume - director.GameplayMusicVolume) > 0.03f
+                || Mathf.Abs(director.GameplayMusicVolume / director.MenuMusicVolume - 0.45f*XunjuuPresentationPreferences.MusicVolume) > 0.01f)
+                throw new InvalidOperationException("La musica no inicio con el volumen de partida esperado.");
+            var helpButton=GameObject.Find("Boton_Ayuda_Controles")?.GetComponent<Button>();
+            if(helpButton==null||director.IsControlsSidebarVisible)
+                throw new InvalidOperationException("La ayuda debe iniciar recogida con su botón visible.");
+            helpButton.onClick.Invoke();
+            if(!director.IsControlsSidebarVisible)throw new InvalidOperationException("La ayuda no se desplegó.");
             GameObject controlsGuide = GameObject.Find("Guia_Controles_Inicio");
             RectTransform controlsRect = controlsGuide != null ? controlsGuide.GetComponent<RectTransform>() : null;
             Text[] controlsLabels = controlsGuide != null ? controlsGuide.GetComponentsInChildren<Text>(true) : Array.Empty<Text>();
             if (controlsRect == null || controlsRect.anchorMin.x < 0.99f || controlsRect.anchorMin.y < 0.99f
-                || controlsLabels.Length < 2 || controlsLabels.Min(label => label.fontSize) < 20)
+                || controlsLabels.Length < 2 || controlsLabels.Where(label => label.name == "Accion_Control").Any(label => label.fontSize < 20))
                 throw new InvalidOperationException("La guia de controles no quedo legible en la esquina superior derecha.");
+            helpButton.onClick.Invoke();
 
             director.ResetLevelProgressionForValidation();
             player.RemoveEquippedWeapon();
@@ -136,7 +141,12 @@ public static class XunjuuTwoLevelRuntimeValidation
 
             // ACCION: comprobar en Play Mode que mano, cooldown y audio terminan
             // junto con Attack.anim antes de avanzar la progresion de la beta.
+            float attackStarted=Time.time;
             player.SendMessage("Attack", SendMessageOptions.DontRequireReceiver);
+            var cooldownField=typeof(PlayerController).GetField("nextAttackTime",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic);
+            float actualDeadline=(float)cooldownField.GetValue(player);
+            if(Mathf.Abs(actualDeadline-attackStarted-player.BasicAttackCooldown)>.001f)
+                throw new InvalidOperationException("El golpe de mano no establecio su cooldown de juego.");
             await Task.Delay(90);
             if (!player.IsAttacking())
                 throw new InvalidOperationException("El golpe de mano no inicio su animacion.");
@@ -144,10 +154,14 @@ public static class XunjuuTwoLevelRuntimeValidation
             if (player.IsAttacking() || player.IsAttackAudioPlaying)
                 throw new InvalidOperationException("El golpe de mano o su sonido exceden Attack.anim.");
 
+            // Task.Delay mide tiempo de pared: en un frame lento los 550 ms anteriores
+            // pueden superar el cooldown real de 620 ms. Verificar una ventana futura
+            // explícita en este mismo frame, sin alargar ni cambiar el combate del juego.
+            cooldownField.SetValue(player,Time.time+player.BasicAttackCooldown);
             player.SendMessage("Attack", SendMessageOptions.DontRequireReceiver);
-            await Task.Delay(25);
-            if (player.IsAttacking())
+            if (player.IsAttacking()||(float)cooldownField.GetValue(player)<=Time.time)
                 throw new InvalidOperationException("El golpe de mano ignoro su cooldown.");
+            cooldownField.SetValue(player,actualDeadline);
             await Task.Delay(90);
 
             // ACCION: simular la recoleccion de las cinco flores sin mover al jugador.
@@ -187,30 +201,55 @@ public static class XunjuuTwoLevelRuntimeValidation
                 XunjuuAnimalCaptureEvents.Report(animal.gameObject, animal.FaunaId);
             await Task.Delay(300);
 
+            if(levelTwo.CurrentPhase!=XunjuuLevel2KillMission.MissionPhase.Herbal||player.HasOrbitalWeapon())
+                throw new InvalidOperationException("La fauna debe abrir el huerto antes de entregar el arma.");
+            var herbal=director.GetComponent<XunjuuHerbalLearningMission>();
+            foreach(var id in new[]{"manzanilla","manzanilla","hierbabuena"})
+            {
+                var plant=UnityEngine.Object.FindObjectsByType<XunjuuMedicinalPlant>(FindObjectsSortMode.None)
+                    .First(p=>p.Entry.Id==id&&p.IsAvailable);
+                player.transform.position=plant.transform.position+Vector3.right;
+                if(player.TryGetComponent<Rigidbody>(out var herbalBody))herbalBody.position=player.transform.position;
+                if(!plant.TryHarvest(player,out string reason))throw new InvalidOperationException(reason);
+            }
+            herbal.RefreshProgress();
+            var herbalBrowser=UnityEngine.Object.FindFirstObjectByType<XunjuuLudotecaBrowser>();
+            herbalBrowser.OpenHerbalism();
+            herbalBrowser.ShowPlantDetails(XunjuuMedicinalPlantCatalog.Find("manzanilla"));
+            herbalBrowser.ShowPlantDetails(XunjuuMedicinalPlantCatalog.Find("hierbabuena"));
+            herbalBrowser.Close();herbal.RefreshProgress();
+            if(!herbal.TryIdentifyPlant("manzanilla")||!player.GetComponent<XunjuuHerbalCrafting>().TryCraft())
+                throw new InvalidOperationException("No se completo la preparacion del huerto.");
+            herbal.RefreshProgress();
             if (!player.HasOrbitalWeapon() || player.HasOrbitalAttackUnlocked())
-                throw new InvalidOperationException("Las seis capturas deben entregar Macuahuitl, pero Orbitasword debe seguir bloqueado.");
+                throw new InvalidOperationException("Preparar el morral debe entregar Macuahuitl, no Orbitasword.");
             OrbitalWeapon equippedWeapon = player.GetComponentInChildren<OrbitalWeapon>(true);
             if (equippedWeapon == null || !equippedWeapon.IsAtRest()
                 || !equippedWeapon.IsWeaponVisible || !equippedWeapon.IsRenderedBehindPlayer())
                 throw new InvalidOperationException("El Macuahuitl no quedo visible detras de la espalda.");
             player.SendMessage("SwordAttack", SendMessageOptions.DontRequireReceiver);
+            await Task.Delay(90);
+            if(!player.IsAttacking()||!equippedWeapon.IsBusy)
+                throw new InvalidOperationException("El Macuahuitl no inició su tajo.");
+            if(equippedWeapon.UsesOriginalPlayerAttackAnimation==equippedWeapon.IsWeaponVisible)
+                throw new InvalidOperationException("Visibilidad del arma incompatible con la animación activa.");
             bool basicAttackAppearedDuringSword = false;
             for (int sample = 0; sample < 5; sample++)
             {
-                await Task.Delay(70);
+                await Task.Delay(35);
                 basicAttackAppearedDuringSword |= player.IsBasicAttackAnimationPlaying;
             }
-            if (!player.IsAttacking() || !equippedWeapon.IsBusy || equippedWeapon.IsWeaponVisible)
-                throw new InvalidOperationException("El Macuahuitl no inicio su tajo sincronizado.");
             if (basicAttackAppearedDuringSword)
                 throw new InvalidOperationException("SwordAttack encadeno incorrectamente la animacion de puno.");
-            await Task.Delay(170);
+            float swordDeadline=Time.realtimeSinceStartup+equippedWeapon.GetAttackDuration()+1f;
+            while((player.IsAttacking()||equippedWeapon.IsBusy)&&Time.realtimeSinceStartup<swordDeadline)await Task.Delay(25);
+            await Task.Delay(70);
             if (player.IsAttacking() || equippedWeapon.IsBusy || player.IsAttackAudioPlaying)
                 throw new InvalidOperationException("El sonido del Macuahuitl dura mas que SwordAttack.anim.");
             if (!equippedWeapon.IsWeaponVisible || !equippedWeapon.IsRenderedBehindPlayer())
                 throw new InvalidOperationException("El Macuahuitl no regreso detras del jugador al terminar F.");
             if (!levelTwo.IsEnemyPhase || !levelTwo.EnemyGroupVisible || levelTwo.AnimalGroupVisible)
-                throw new InvalidOperationException("Despues de seis capturas deben aparecer solo los cinco Dyanatr'o.");
+                throw new InvalidOperationException("Después de preparar el morral deben aparecer cinco sombras.");
             if (player.HasOrbitalAttackUnlocked())
                 throw new InvalidOperationException("Orbitasword se desbloqueo antes de terminar los cinco enemigos.");
 
@@ -218,14 +257,14 @@ public static class XunjuuTwoLevelRuntimeValidation
             EnemyHealth[] regularEnemies = UnityEngine.Object.FindObjectsByType<EnemyHealth>(FindObjectsInactive.Include, FindObjectsSortMode.None);
             GameObject[] enemies = fireEnemies.Select(enemy => enemy.gameObject)
                 .Concat(regularEnemies.Select(enemy => enemy.gameObject))
-                .Where(enemy => enemy.name.StartsWith("Enemigo_"))
+                .Where(enemy => enemy.name.StartsWith("Enemigo_")&&enemy.activeInHierarchy)
                 .Distinct()
                 .Take(5)
                 .ToArray();
 
             if (enemies.Length != 5)
                 throw new InvalidOperationException($"Contenido enemigo incompleto: enemigos={enemies.Length}/5.");
-            if (fireEnemies.Where(enemy => enemy.name.StartsWith("Enemigo_")).Any(enemy => !enemy.HasFootstepAudio || !enemy.HasAttackAudio))
+            if (fireEnemies.Where(enemy => enemy.name.StartsWith("Enemigo_")&&enemy.gameObject.activeInHierarchy).Any(enemy => !enemy.HasFootstepAudio || !enemy.HasAttackAudio))
                 throw new InvalidOperationException("Un Dyanatr'o no cargo sus pisadas o voz de ataque.");
             Vector3[] enemyPositionsBeforeMovement = enemies.Select(enemy => enemy.transform.position).ToArray();
             await Task.Delay(850);
@@ -244,7 +283,7 @@ public static class XunjuuTwoLevelRuntimeValidation
 
             // ACCION: acercar temporalmente al jugador y comprobar que el
             // enemigo vuelve a lanzar una bola de fuego por encima del suelo.
-            EnemyFireBreath attackingEnemy = fireEnemies.FirstOrDefault(enemy => enemy.name.StartsWith("Enemigo_"));
+            EnemyFireBreath attackingEnemy = fireEnemies.FirstOrDefault(enemy => enemy.name.StartsWith("Enemigo_")&&enemy.gameObject.activeInHierarchy);
             if (attackingEnemy == null)
                 throw new InvalidOperationException("No existe un Dyanatr'o de fuego para validar su ataque.");
             Vector3 originalPlayerPosition = player.transform.position;
@@ -289,7 +328,7 @@ public static class XunjuuTwoLevelRuntimeValidation
             if (!levelTwo.Completed || UnityEngine.Object.FindFirstObjectByType<XunjuuRewardPlaceholder>() == null)
                 throw new InvalidOperationException("Derrotar al jefe no creo la recompensa provisional.");
 
-            Debug.Log("[XUNJUU BETA PASS] 5 flores -> 6 capturas -> Macuahuitl -> 5 Dyanatr'o -> Orbitasword -> Ocelotl -> nivel completado.");
+            Debug.Log("[XUNJUU BETA PASS] 5 flores -> 6 capturas -> huerto -> preparación -> Macuahuitl -> 5 sombras -> Orbitasword -> Ocelotl -> nivel completado.");
         }
         catch (Exception exception)
         {
@@ -298,6 +337,7 @@ public static class XunjuuTwoLevelRuntimeValidation
         }
         finally
         {
+            foreach(var item in plantSaved){string key=XunjuuMedicinalPlantCatalog.SavePrefix+item.Key;if(item.Value<0)PlayerPrefs.DeleteKey(key);else PlayerPrefs.SetInt(key,item.Value);}PlayerPrefs.Save();
             SessionState.SetBool(PendingKey, false);
             validationRunning = false;
             await Task.Delay(350);

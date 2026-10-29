@@ -42,13 +42,15 @@ public sealed class XunjuuOpeningJourney : MonoBehaviour
     {
         var go=new GameObject("Texto",typeof(RectTransform),typeof(Text));go.transform.SetParent(parent,false);
         var rt=go.GetComponent<RectTransform>();rt.anchorMin=rt.anchorMax=rt.pivot=new Vector2(0,1);rt.anchoredPosition=position;rt.sizeDelta=size;
-        var text=go.GetComponent<Text>();text.font=Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");text.fontSize=fontSize;text.color=color;text.raycastTarget=false;text.alignment=TextAnchor.UpperLeft;
+        var text=go.GetComponent<Text>();text.font=XunjuuTypography.Regular;text.fontSize=fontSize;text.color=color;text.raycastTarget=false;text.alignment=TextAnchor.UpperLeft;
         return text;
     }
     private void Update()
     {
         if(player==null || panel==null)return;
         if(!director.IsGameplayHudVisible){panel.SetActive(false);previousPosition=player.transform.position;return;}
+        var notice=director.GetComponent<XunjuuMissionNotice>();
+        if(!TutorialActive&&notice!=null&&notice.HasNotice){panel.SetActive(false);return;}
         if(TutorialActive)
         {
             panel.SetActive(true);
@@ -65,17 +67,8 @@ public sealed class XunjuuOpeningJourney : MonoBehaviour
         if(mission!=null && mission.CurrentPhase!=lastPhase)
         {
             lastPhase=mission.CurrentPhase;
-            switch(lastPhase)
-            {
-                case XunjuuLevel2KillMission.MissionPhase.Animals:
-                    Story("II · EL SENDERO ALTERADO","Las cinco palabras orientan a Mateo. La fauna está desorientada: acércate con calma y pulsa C para capturar y registrar seis especies en la Ludoteca. No debes atacarlas.");break;
-                case XunjuuLevel2KillMission.MissionPhase.Enemies:
-                    Story("III · EL ORIGEN DEL DESORDEN","Tras registrar las seis especies, la comunidad confía el Macuahuitl a Mateo. Ahora puede enfrentar a los cinco Dyanatr'o que cortan el camino hacia la milpa.");break;
-                case XunjuuLevel2KillMission.MissionPhase.Boss:
-                    Story("IV · EL GUARDIÁN DEL PASO","Al vencer a las cinco sombras, Mateo aprende el giro protector. E activa el ataque orbital. Ocelotl custodia el último paso: enfrenta al jefe para reabrir el camino.");break;
-                case XunjuuLevel2KillMission.MissionPhase.Completed:
-                    Story("V · VOLVER PARA COMPARTIR","El camino queda abierto. Mateo vuelve con las palabras recuperadas y la recompensa. Proteger su hogar también significa compartir lo aprendido: la memoria continúa en la comunidad.");break;
-            }
+            // Los cambios de mision se muestran solo en el aviso bilingue central.
+            panel.SetActive(false);storyUntil=0;return;
         }
         panel.SetActive(Time.unscaledTime<storyUntil);
     }
@@ -84,7 +77,7 @@ public sealed class XunjuuOpeningJourney : MonoBehaviour
         body.fontSize=21;
         title.text="ANTES DEL CAMINO · "+(stage+1)+" / 4";
         string[] text={
-            "Mateo sale al claro sin arma. Antes de buscar las flores, reconoce el terreno: camina cuatro metros con W, A, S y D.",
+            "DYANATR’O sale al claro sin arma. Antes de buscar las flores, reconoce el terreno: camina cuatro metros con W, A, S y D.",
             "El sendero exige pasos seguros. Pulsa ESPACIO para saltar y espera a volver al suelo.",
             "Practica un golpe al aire con CLIC IZQUIERDO. Aún no tienes arma; primero aprenderás a moverte y a escuchar.",
             "Pulsa I para abrir tu morral. Aquí guardarás las palabras y recompensas del viaje. Pulsa I de nuevo para cerrarlo."};
@@ -95,7 +88,7 @@ public sealed class XunjuuOpeningJourney : MonoBehaviour
         if(!TutorialActive)return;TutorialActive=false;stage=4;
         skip.gameObject.SetActive(false);
         director.OnOpeningTutorialCompleted();
-        Story("I · CINCO PALABRAS PARA VOLVER","La milpa y sus caminos están en peligro. Busca las cinco flores-palabra del entorno: cada una conserva un recuerdo. La comunidad te confiará el macuahuitl cuando reúnas las cinco.");
+        Story("I · VOLVER A NOMBRAR EL CAMINO","Cada flor de memoria guarda una palabra. Reúne cinco, registra después seis animales con C y visita el huerto. Allí aprenderás a preparar tu morral antes de enfrentar las sombras.");
     }
     private void Story(string heading,string text)
     {title.text=heading;body.text=text;body.fontSize=19;storyUntil=Time.unscaledTime+14;panel.SetActive(true);}

@@ -85,6 +85,7 @@ public sealed partial class XunjuuLudotecaBrowser
         scroll.horizontal = false; scroll.vertical = true; scroll.scrollSensitivity = 32; scroll.movementType = ScrollRect.MovementType.Clamped;
         Canvas.ForceUpdateCanvases(); scroll.verticalNormalizedPosition = 1;
         statusText.text = "Ficha botánica y cultural · Desplázate para leer la información y sus fuentes";
+        if (IsOpen && currentPage == Page.Plants) XunjuuMedicinalPlantCatalog.RecordCardViewed(entry.Id);
         return true;
     }
     private void ClosePlantDetails()

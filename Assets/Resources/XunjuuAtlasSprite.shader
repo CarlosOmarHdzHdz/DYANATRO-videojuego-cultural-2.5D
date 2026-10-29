@@ -1,6 +1,9 @@
 Shader "Xunjuu/AtlasSprite"
 {
-    Properties { [PerRendererData] _MainTex("Sprite",2D)="white"{} _Color("Tint",Color)=(1,1,1,1) _KeyMode("Magenta key",Float)=0 }
+    Properties { [PerRendererData] _MainTex("Sprite",2D)="white"{} _Color("Tint",Color)=(1,1,1,1) _KeyMode("Magenta key",Float)=0
+        [PerRendererData] _HitAmount("Hit flash",Range(0,1))=0
+        [PerRendererData] _HitOffset("Visual recoil",Vector)=(0,0,0,0)
+        [PerRendererData] _HitSquash("Visual squash",Float)=0 }
     SubShader
     {
         Tags {"Queue"="Transparent" "RenderType"="Transparent" "RenderPipeline"="UniversalPipeline" "CanUseSpriteAtlas"="True"}
@@ -15,10 +18,15 @@ Shader "Xunjuu/AtlasSprite"
             CBUFFER_START(UnityPerMaterial)
             float4 _Color;
             float _KeyMode;
+            float _HitAmount;
+            float4 _HitOffset;
+            float _HitSquash;
             CBUFFER_END
             struct A{float4 pos:POSITION;float2 uv:TEXCOORD0;float4 color:COLOR;};
             struct V{float4 pos:SV_POSITION;float2 uv:TEXCOORD0;float4 color:COLOR;};
-            V vert(A i){SetUpSpriteInstanceProperties();i.pos.xyz=UnityFlipSprite(i.pos.xyz,unity_SpriteProps.xy);V o;o.pos=TransformObjectToHClip(i.pos.xyz);o.uv=i.uv;o.color=i.color*_Color*unity_SpriteColor;return o;}
+            V vert(A i){SetUpSpriteInstanceProperties();i.pos.xyz=UnityFlipSprite(i.pos.xyz,unity_SpriteProps.xy);
+                i.pos.xy*=float2(1+_HitSquash,1-_HitSquash);i.pos.xy+=_HitOffset.xy;
+                V o;o.pos=TransformObjectToHClip(i.pos.xyz);o.uv=i.uv;o.color=i.color*_Color*unity_SpriteColor;return o;}
             half4 frag(V i):SV_Target
             {
                 half4 t=SAMPLE_TEXTURE2D(_MainTex,sampler_MainTex,i.uv);
@@ -38,6 +46,7 @@ Shader "Xunjuu/AtlasSprite"
                 // Preserve authored coverage on plants; only keyed pixel-art atlases
                 // need opaque interiors. Forcing every edge to one made grass bases solid.
                 if(_KeyMode<1.5)t.a=1;
+                t.rgb=lerp(t.rgb,half3(1,.64,.48),saturate(_HitAmount)*.72);
                 return t*i.color;
             }
             ENDHLSL

@@ -19,10 +19,18 @@ public sealed class XunjuuEnvironment3D : MonoBehaviour
     }
     private readonly List<TreeVisual> trees = new List<TreeVisual>();
     private readonly HashSet<int> converted = new HashSet<int>();
+    private readonly HashSet<int> inspectedSprites=new HashSet<int>();
     private MaterialPropertyBlock block;
     private XunjuuEnvironmentCatalog catalog;
     private Camera view;
     private Transform player;
+    private Vector3 lastViewPosition,lastTarget;
+    private Quaternion lastViewRotation;
+    private bool viewCached,fadePending;
+    private float nextTreeStateCheck;
+    public bool TreeClearanceReady { get; private set; }
+    public int RelocatedTreeCount { get; private set; }
+    public int UnresolvedTreeCount { get; private set; }
 
     private IEnumerator Start()
     {
@@ -40,8 +48,11 @@ public sealed class XunjuuEnvironment3D : MonoBehaviour
         AddBoundaries();
         while (enabled)
         {
-            yield return new WaitForSeconds(2f);
+            yield return new WaitForSecondsRealtime(1f);
+            if(Time.timeScale<=0f&&TreeClearanceReady)continue;
             ConvertSprites();
+            var meadow=GetComponent<XunjuuMeadowDressing>();
+            if(meadow!=null&&meadow.VillageReady&&XunjuuSettlementPlan.Fields.Count>0)ResolveTreeReservations();
         }
     }
 
@@ -49,7 +60,7 @@ public sealed class XunjuuEnvironment3D : MonoBehaviour
     {
         foreach (SpriteRenderer sprite in FindObjectsByType<SpriteRenderer>(FindObjectsInactive.Include, FindObjectsSortMode.None))
         {
-            if (sprite == null || sprite.GetComponentInParent<PlayerController>() != null) continue;
+            if (sprite == null || !inspectedSprites.Add(sprite.GetInstanceID()) || sprite.GetComponentInParent<PlayerController>() != null) continue;
             TreeInteractivo tree = sprite.GetComponentInParent<TreeInteractivo>();
             string name = (sprite.name + " " + (sprite.sprite != null ? sprite.sprite.name : "")).ToLowerInvariant();
             bool isTree = tree != null || name.Contains("arbol") || name.Contains("tree");
@@ -65,7 +76,8 @@ public sealed class XunjuuEnvironment3D : MonoBehaviour
             float height = isTree ? XunjuuWorldScale.TreeHeight(player, Random.value) : isCorn ? 1.7f : 0.5f;
             var old = owner.GetComponentsInChildren<Collider>(true);
             var originalSprites = owner.GetComponentsInChildren<SpriteRenderer>(true);
-            GameObject visual = isTree ? XunjuuArtMeshes.Create("Arbol" + (trees.Count % 3), owner) : Instantiate(prefab, owner);
+            int form=XunjuuRegionalTree.SelectForm(owner.position);
+            GameObject visual = XunjuuArtMeshes.Create("Arbol" + form, owner);
             visual.name = "Visual_3D";
             // Legacy billboard parents can have unequal X/Y/Z scale. Do not
             // inherit that distortion when replacing them with a 3D tree.
@@ -84,11 +96,14 @@ public sealed class XunjuuEnvironment3D : MonoBehaviour
                 var trunk = visual.AddComponent<CapsuleCollider>();
                 trunk.radius = 0.18f; trunk.height = 2.5f; trunk.center = Vector3.up * 1.25f;
             }
-            foreach (SpriteRenderer original in originalSprites) original.enabled = false;
+            foreach (SpriteRenderer original in originalSprites){original.enabled=false;original.forceRenderingOff=true;}
+            foreach(var animator in owner.GetComponentsInChildren<Animator>(true))animator.enabled=false;
             Renderer[] renderers = visual.GetComponentsInChildren<Renderer>();
             var lod = visual.AddComponent<LODGroup>();
             lod.SetLODs(new[] { new LOD(0.025f, renderers) });
             lod.RecalculateBounds();
+            var regional=owner.GetComponent<XunjuuRegionalTree>()??owner.gameObject.AddComponent<XunjuuRegionalTree>();
+            regional.Configure(form,visual.GetComponent<Renderer>());
             // Keep trigger objectives intact; the tree's 3D trunk replaces its broad sprite collider.
             if (isTree) foreach (Collider collider in old) if (!collider.isTrigger) collider.enabled = false;
             trees.Add(new TreeVisual { owner = owner, visual = visual.transform, interaction = tree,
@@ -99,17 +114,20 @@ public sealed class XunjuuEnvironment3D : MonoBehaviour
 
     private void LateUpdate()
     {
-        if (view == null || player == null || block == null) return;
+        if (view == null || player == null || block == null || Time.timeScale<=0f) return;
         Vector3 target = player.position + Vector3.up * 0.5f;
+        if(viewCached&&!fadePending&&lastViewPosition==view.transform.position&&lastViewRotation==view.transform.rotation&&lastTarget==target&&Time.unscaledTime<nextTreeStateCheck)return;
+        nextTreeStateCheck=Time.unscaledTime+.15f;
+        lastViewPosition=view.transform.position;lastViewRotation=view.transform.rotation;lastTarget=target;viewCached=true;fadePending=false;
         Vector3 rayDirection = target - view.transform.position;
         Ray ray = new Ray(view.transform.position, rayDirection.normalized);
         foreach (TreeVisual entry in trees)
         {
             if (entry.owner == null || entry.visual == null) continue;
-            foreach (SpriteRenderer sprite in entry.sprites) if (sprite != null) sprite.enabled = false;
+            foreach (SpriteRenderer sprite in entry.sprites) if (sprite != null){sprite.enabled=false;sprite.forceRenderingOff=true;}
             foreach (Collider collider in entry.oldColliders) if (collider != null && !collider.isTrigger) collider.enabled = false;
             bool alive = entry.interaction == null || entry.interaction.IsAlive;
-            entry.visual.gameObject.SetActive(alive);
+            if(entry.visual.gameObject.activeSelf!=alive)entry.visual.gameObject.SetActive(alive);
             if (!alive) continue;
             entry.visual.rotation = entry.rotation;
             Bounds bounds = entry.bounds;
@@ -117,6 +135,7 @@ public sealed class XunjuuEnvironment3D : MonoBehaviour
             bool blocking = bounds.IntersectRay(ray, out float distance) && distance < rayDirection.magnitude;
             float previousFade = entry.fade;
             entry.fade = Mathf.MoveTowards(entry.fade, blocking ? XunjuuSceneVisualPolicy.OccludedVisibility : 1f, Time.unscaledDeltaTime * 4f);
+            if(!Mathf.Approximately(entry.fade,blocking?XunjuuSceneVisualPolicy.OccludedVisibility:1f))fadePending=true;
             if (Mathf.Approximately(previousFade, entry.fade)) continue;
             foreach (Renderer renderer in entry.renderers)
             {
@@ -125,6 +144,37 @@ public sealed class XunjuuEnvironment3D : MonoBehaviour
                 renderer.SetPropertyBlock(block);
             }
         }
+    }
+
+    public void ResolveTreeReservations()
+    {
+        int version=XunjuuSettlementPlan.Houses.Count*10000+XunjuuSettlementPlan.Fields.Count*100+XunjuuSettlementPlan.Accesses.Count;
+        UnresolvedTreeCount=0;
+        foreach(var tree in FindObjectsByType<XunjuuRegionalTree>(FindObjectsSortMode.None))
+        {
+            if(tree.Visual==null)continue;
+            if(tree.PlacementChecked&&tree.ReservationVersion==version&&(tree.CheckedPosition-tree.transform.position).sqrMagnitude<.001f)continue;
+            float radius=tree.CrownRadius+.65f;Vector3 original=tree.transform.position;
+            bool blocked=XunjuuSettlementPlan.Reserved(tree.Bounds.center,radius);
+            if(blocked)
+            {
+                bool placed=false;
+                for(int attempt=0;attempt<120;attempt++)
+                {
+                    float angle=attempt*2.39996f+(original.x+original.z)*.17f;
+                    float distance=5f+Mathf.Sqrt(attempt)*5f;
+                    Vector3 candidate=original+new Vector3(Mathf.Cos(angle),0,Mathf.Sin(angle))*distance;
+                    Vector3 center=candidate+(tree.Bounds.center-original);center.y=0;
+                    if(XunjuuSettlementPlan.Reserved(center,radius)||!XunjuuSettlementPlan.TryGround(candidate,out float ground))continue;
+                    Vector3 delta=candidate-original;delta.y=ground-tree.Bounds.min.y;
+                    tree.transform.position+=delta;placed=true;RelocatedTreeCount++;break;
+                }
+                if(!placed){UnresolvedTreeCount++;continue;}
+            }
+            tree.PlacementChecked=true;tree.CheckedPosition=tree.transform.position;tree.ReservationVersion=version;
+        }
+        foreach(var entry in trees)if(entry.visual!=null)entry.bounds=GetBounds(entry.visual.gameObject);
+        Physics.SyncTransforms();TreeClearanceReady=UnresolvedTreeCount==0;
     }
 
     private void ConfigureLightingAndGround()

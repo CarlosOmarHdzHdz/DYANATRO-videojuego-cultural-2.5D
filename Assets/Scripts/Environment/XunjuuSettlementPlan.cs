@@ -4,7 +4,8 @@ using UnityEngine;
 // Reservas compartidas: casas, accesos, cultivos y huerto nunca se superponen.
 public static class XunjuuSettlementPlan
 {
-    public struct Access { public Vector3 door, junction; public float width; }
+    public struct Access { public Vector3 door, junction; public float width; public Vector3[] points; }
+    public const float VillagePathExtent = 230f;
     private static bool initialized;
     public static Vector3 Origin { get; private set; }
     public static readonly List<Bounds> Houses = new List<Bounds>();
@@ -19,7 +20,43 @@ public static class XunjuuSettlementPlan
         if (initialized) return;
         Origin = origin; initialized = true;
     }
-    public static Vector3 MainPathAt(float z) => new Vector3(Origin.x + Mathf.Sin((z - Origin.z) * .018f) * 10f, Origin.y, z);
+    public static Vector3 MainPathAt(float z)
+    {
+        float d = z - Origin.z;
+        float bend = Mathf.Sin(d * .033f) * 17f + Mathf.Sin(d * .081f) * 5f
+            + (Mathf.Sin(d * .157f + .6f) - Mathf.Sin(.6f)) * 1.5f;
+        return new Vector3(Origin.x + bend, Origin.y, z);
+    }
+    public static float MainPathHalfWidth(float z)
+        => 2.15f + Mathf.Sin((z - Origin.z) * .093f) * .30f + Mathf.Sin(z * .29f) * .13f;
+
+    public static Access CreateAccess(Vector3 door, Vector3 junction, float width, int seed)
+    {
+        Vector3 direction = junction - door; direction.y = 0f;
+        float length = direction.magnitude;
+        Vector3 side = Vector3.Cross(direction.normalized, Vector3.up);
+        float bend = Mathf.Min(15f, length * .28f) * (seed % 2 == 0 ? 1f : -1f);
+        Vector3 first = door + direction * .28f + side * bend;
+        Vector3 second = door + direction * .72f + side * bend * .55f;
+        int count = Mathf.Max(8, Mathf.CeilToInt(length / 1.2f));
+        var points = new Vector3[count + 1];
+        for (int i = 0; i <= count; i++)
+        {
+            float t = i / (float)count, u = 1f - t;
+            points[i] = u*u*u*door + 3f*u*u*t*first + 3f*u*t*t*second + t*t*t*junction;
+        }
+        points[0] = door; points[count] = junction;
+        return new Access { door = door, junction = junction, width = width, points = points };
+    }
+
+    public static float AccessDistance(Vector3 p, Access access)
+    {
+        if (access.points == null || access.points.Length < 2) return SegmentDistance(p, access.door, access.junction);
+        float distance = float.PositiveInfinity;
+        for (int i = 1; i < access.points.Length; i++)
+            distance = Mathf.Min(distance, SegmentDistance(p, access.points[i-1], access.points[i]));
+        return distance;
+    }
     public static float SegmentDistance(Vector3 p, Vector3 a, Vector3 b)
     {
         p.y = a.y = b.y = 0;
@@ -29,9 +66,9 @@ public static class XunjuuSettlementPlan
     }
     public static bool OnPath(Vector3 p, float margin = 0)
     {
-        if (Mathf.Abs(p.x - MainPathAt(p.z).x) < 2.65f + margin) return true;
+        if (Mathf.Abs(p.x - MainPathAt(p.z).x) < MainPathHalfWidth(p.z) + .8f + margin) return true;
         foreach (Access access in Accesses)
-            if (SegmentDistance(p, access.door, access.junction) < access.width + margin) return true;
+            if (AccessDistance(p, access) < access.width * 1.2f + .25f + margin) return true;
         return false;
     }
     public static bool ContainsXZ(Bounds b, Vector3 p, float margin = 0)

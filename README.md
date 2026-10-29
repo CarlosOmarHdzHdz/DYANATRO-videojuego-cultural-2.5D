@@ -77,6 +77,16 @@ aislado; no se ha borrado ni mezclado con la escena principal. `TextMesh Pro`,
 
 ## Verificación
 
+Inicio y pausa incluyen **Ajustes** de música y movimiento de menús. Se puede
+navegar con TAB/flechas y ENTER. Reiniciar, volver al inicio y salir desde pausa
+piden confirmación para evitar perder la sesión por un clic accidental.
+Consulta [ajustes y navegación](Docs/Design/AJUSTES_Y_NAVEGACION_20261019.md).
+
+La ludoteca ya no simula un navegador: tiene cabecera compacta, ocho destinos
+laterales, fichas y minijuegos más amplios. Se redujo trabajo repetido de guía,
+política visual y registro de interacción, y se evita renderizar el mundo tras
+la ludoteca opaca. Véase [diseño y mediciones](Docs/Design/LUDOTECA_RENOVADA_Y_FLUIDEZ_20261020.md).
+
 En Unity: **Tools > Xunjuu > Validar captura y fichas** comprueba fauna, navegación,
 captura, fichas y recompensa. Las verificaciones de movimiento del protagonista
 están en `Assets/Editor/Validation/XunjuuMotionValidation.cs`.
@@ -109,3 +119,46 @@ La revisión también incorpora transiciones suaves de la barra de vida, caminos
 de acceso a las viviendas, milpas que respetan las reservas de espacio y nuevos
 sprites para la infusión y las flores recolectables. Consulta la
 [revisión de aldea y herbolaria](Docs/Design/REVISION_ALDEA_HERBOLARIA_20261016.md).
+
+## Organización y pausa musical
+
+El proyecto conserva sus carpetas Unity (`Assets`, `Packages`, `ProjectSettings`),
+documentación técnica en `Docs`, herramientas en `Tools` y entregas en `Builds`.
+Los Word/PDF y las revisiones académicas se guardan fuera del juego, en un
+respaldo recuperable con manifiesto de integridad.
+
+La música de fondo empieza al entrar al recorrido, no en el menú o el prólogo.
+Se pausa con el juego y con la ludoteca; al reanudar continúa desde el mismo punto.
+La prueba de regresión del editor es `XunjuuMusicPauseValidation.Run`, preferiblemente
+en una copia aislada. Consulta [estructura y mantenimiento](Docs/Development/ESTRUCTURA.md).
+
+## Saberes del huerto y aldea ampliada
+
+Después de recuperar cinco flores de memoria y registrar seis animales se abre
+**Saberes del huerto**: recolectar manzanilla y hierbabuena, consultar sus fichas,
+identificar la planta y preparar la infusión. La preparación abre el combate;
+usarla después es opcional mientras la salud esté completa. Los caminos y accesos
+son curvos y de ancho variable; las viviendas respetan esas mismas reservas.
+Los resultados de misión se muestran en una única tarjeta central con vocabulario
+mazahua arriba y explicación en español abajo.
+
+Consulta el [diseño y las pruebas del recorrido](Docs/Design/MISION_HERBOLARIA_Y_ALDEA_20261019.md).
+
+El morral distingue memoria, ingredientes y preparados, pausa el mundo al abrirse
+y separa la cuadrícula, la ficha y la receta. Los árboles pino/encino se reubican
+si sus copas invaden reservas. La flora medicinal se presenta como cultivada;
+consulta la [revisión regional](Docs/Design/REVISION_FLORA_REGIONAL_20261019.md)
+y la [historia integrada](Docs/Design/HISTORIA_MEMORIA_Y_TERRITORIO_20261019.md).
+
+## Interfaz espaciada y archivos para Blender
+
+La tarjeta de objetivo separa capítulo, contador, instrucciones y barra de avance;
+el bordado no ocupa el área de lectura. Paneles y botones tienen transiciones con
+tiempo no escalado. El morral evita reconstrucciones mientras permanece cerrado.
+Esta revisión de UI no modifica el diseño ni la colocación de los árboles.
+
+`Tools > Xunjuu > Exportar árboles actuales para Blender` genera GLB con geometría,
+normales, colores de vértices y material mate, además de vistas PNG. El paquete de
+los dos modelos activos está en `Exports/Blender/Arboles_DYANATRO_para_Blender_20261019.zip`.
+Importa los GLB desde Blender y guarda allí como .blend si lo necesitas.
+Consulta el [alcance y las comprobaciones](Docs/Design/INTERFAZ_ESPACIADA_Y_MODELOS_BLENDER_20261019.md).

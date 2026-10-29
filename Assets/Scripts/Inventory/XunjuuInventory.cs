@@ -21,6 +21,9 @@ public sealed class XunjuuInventory : MonoBehaviour
         public string DisplayName => displayName;
         public int Amount => amount;
         public Sprite Icon => icon;
+        public XunjuuItemCatalog.ItemKind Kind => XunjuuItemCatalog.Kind(itemId);
+        public string Category => XunjuuItemCatalog.Category(itemId);
+        public string Description => XunjuuItemCatalog.Description(itemId,displayName);
 
         public Slot(string id, string name, int initialAmount, Sprite itemIcon)
         {

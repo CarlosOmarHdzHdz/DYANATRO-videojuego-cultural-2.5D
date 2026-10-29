@@ -138,6 +138,10 @@ public static class XunjuuHealthVisualValidation
         var host = new GameObject("Player_Health_QA"); host.transform.SetParent(root.transform);
         var player = host.AddComponent<PlayerController>(); player.enabled = false;
         var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
+        typeof(PlayerController).GetField("maxHealth", flags).SetValue(player, 200);
+        typeof(PlayerController).GetMethod("Awake", flags).Invoke(player, null);
+        if (player.GetMaxHealth() != 200 || player.GetCurrentHealth() != 200) throw new Exception("Serialized max health was overwritten");
+        typeof(PlayerController).GetField("maxHealth", flags).SetValue(player, 100);
         typeof(PlayerController).GetMethod("Awake", flags).Invoke(player, null);
         typeof(PlayerController).GetField("barraVida", flags).SetValue(player, bar);
         bar.EstablecerMaxima(100); player.SetHealth(35);
